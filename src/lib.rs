@@ -1,8 +1,6 @@
 //! Generic mesh structure to be used with various meshers.  Also
 //! provide some functions to help to display and design geometries.
 
-#![feature(type_alias_impl_trait)]
-
 use std::{collections::VecDeque,
           io::{self, Write},
           fmt::{self, Display, Formatter},
