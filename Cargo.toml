@@ -1,0 +1,17 @@
+[package]
+name = "mesh"
+version = "0.1.0"
+edition = "2021"
+authors = ["Christophe Troestler <christophe.troestler@umons.ac.be>"]
+description = "Triangular mesh generation and manipulation"
+homepage = "https://github.com/Chris00/rust-mesh"
+repository = "https://github.com/Chris00/rust-mesh"
+documentation = "https://docs.rs/mesh"
+license = "GPL-2.1-or-later"
+keywords = ["math", "mesh", "triangulation", "PDE", "science"]
+categories = ["mathematics", "science"]
+readme = "README.md"
+exclude = ["/.github", "/triangle", "/easymesh"]
+
+[dependencies]
+rgb = "0.8"
