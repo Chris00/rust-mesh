@@ -254,8 +254,7 @@ pub trait Mesh: Pslg {
     /// mesh.latex().sub_levels(&[1., 2., 3., 4.], levels).save("/tmp/foo")?;
     /// # Ok(()) }
     /// ```
-    fn latex<'a>(&'a self) -> LaTeX<'a, Self,
-                                   fn(usize) -> Option<RGB8>, Vec<f64>> {
+    fn latex<'a>(&'a self) -> LaTeX<'a, Self> {
         LaTeX { mesh: &self,  edge_color: None,
                 action: Action::Mesh, z: None, levels: vec![] }
     }
@@ -408,6 +407,30 @@ pub trait Permutable: Mesh {
 
 ////////////////////////////////////////////////////////////////////////
 //
+// Vectors
+
+/// Represent a P1 function defined on a mesh: the value at all points
+/// of the mesh needs to be known.
+pub trait P1 {
+    /// The length of the vector.
+    fn len(&self) -> usize;
+    /// The value of the function at the point of index `i`.
+    fn index(&self, i: usize) -> f64;
+}
+
+impl<const N: usize> P1 for &[f64; N] {
+    fn len(&self) -> usize { <[f64]>::len(*self) }
+    fn index(&self, i: usize) -> f64 { self[i] }
+}
+
+#[cfg(ndarray)]
+impl P1 for ndarray::Array1<f64> {
+    fn len(&self) -> usize { todo!() }
+    fn index(&self, i: usize) -> f64 { todo!() }
+}
+
+////////////////////////////////////////////////////////////////////////
+//
 // LaTeX Output
 
 const BLACK: RGB8 = RGB {r: 0, g: 0, b: 0};
@@ -425,12 +448,14 @@ macro_rules! default_level_color {
 enum Action { Mesh, Levels, SuperLevels, SubLevels }
 
 /// LaTeX output.  Created by [`Mesh::latex`].
-pub struct LaTeX<'a, M, EdgeColor, Vector>
+pub struct LaTeX<'a, M>
 where M: Mesh + ?Sized {
     mesh: &'a M,
-    edge_color: Option<EdgeColor>,
+    // The "dyn" option was chosen because it avoids having a type
+    // parameter for the closure passed on.  This type may confuse the user.
+    edge_color: Option<Box<dyn Fn(usize) -> Option<RGB8> + 'a>>,
     action: Action,
-    z: Option<&'a Vector>,
+    z: Option<Box<dyn P1 + 'a>>,
     levels: Vec<(f64, RGB8)>,
 }
 
@@ -464,10 +489,8 @@ where L: IntoIterator<Item=(f64, RGB8)>{
 /// ```
 ///
 /// [tikz]: https://sourceforge.net/projects/pgf/
-impl<'a, M, EdgeColor, Vector> LaTeX<'a, M, EdgeColor, Vector>
-where M: Mesh,
-      EdgeColor: Fn(usize) -> Option<RGB8>,
-      Vector: IntoIterator<Item=f64> {
+impl<'a, M> LaTeX<'a, M>
+where M: Mesh {
     /// Use the function `edge_color` to color the edges. 
     /// The return value of `edge_color(i)` specifies the color of the
     /// edge numbered `i`.  If `edge_color(i)` returns `None`, the
@@ -487,40 +510,37 @@ where M: Mesh,
     ///                       else { None });
     /// # Ok(()) }
     /// ```
-    pub fn edge<E>(self, edge_color: E) -> LaTeX<'a, M, E, Vector>
-    where E: Fn(usize) -> Option<RGB8> {
-        LaTeX { mesh: self.mesh,  edge_color: Some(edge_color),
+    pub fn edge<E>(self, edge_color: E) -> LaTeX<'a, M>
+    where E: Fn(usize) -> Option<RGB8> + 'a {
+        LaTeX { mesh: self.mesh,  edge_color: Some(Box::new(edge_color)),
                 action: self.action, z: self.z,  levels: self.levels }
     }
 
     /// Specify that one wants to draw the level curves of `z`.
-    pub fn level_curves<Z, L>(self, z: &'a Z, levels: L)
-                              -> LaTeX<'a, M, EdgeColor, Z>
-    where Z: IntoIterator<Item=f64>,
+    pub fn level_curves<Z, L>(self, z: Z, levels: L) -> LaTeX<'a, M>
+    where Z: P1 + 'a,
           L: IntoIterator<Item=(f64, RGB8)> {
         LaTeX { mesh: self.mesh,  edge_color: self.edge_color,
                 action: Action::Levels,
-                z: Some(z),  levels: valid_levels(levels) }
+                z: Some(Box::new(z)),  levels: valid_levels(levels) }
     }
 
     /// Specify that one wants to draw the super-levels of `z`.
-    pub fn super_levels<Z, L>(self, z: &'a Z, levels: L)
-                              -> LaTeX<'a, M, EdgeColor, Z>
-        where Z: IntoIterator<Item=f64>,
+    pub fn super_levels<Z, L>(self, z: Z, levels: L) -> LaTeX<'a, M>
+        where Z: P1 + 'a,
               L: IntoIterator<Item=(f64, RGB8)> {
         LaTeX { mesh: self.mesh,  edge_color: self.edge_color,
                 action: Action::SuperLevels,
-                z: Some(z),  levels: valid_levels(levels) }
+                z: Some(Box::new(z)),  levels: valid_levels(levels) }
     }
 
     /// Specify that one wants to draw the sub-levels of `z`.
-    pub fn sub_levels<Z, L>(self, z: &'a Z, levels: L)
-                         -> LaTeX<'a, M, EdgeColor, Z>
-    where Z: IntoIterator<Item=f64>,
-          L: IntoIterator<Item=(f64, RGB8)>{
+    pub fn sub_levels<Z, L>(self, z: Z, levels: L) -> LaTeX<'a, M>
+    where Z: P1 + 'a,
+          L: IntoIterator<Item=(f64, RGB8)> {
         LaTeX { mesh: self.mesh,  edge_color: self.edge_color,
                 action: Action::SubLevels,
-                z: Some(z),  levels: valid_levels(levels) }
+                z: Some(Box::new(z)),  levels: valid_levels(levels) }
     }
 
     /// Write the mesh `self` to the writer `w`.

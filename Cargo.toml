@@ -15,3 +15,4 @@ exclude = ["/.github", "/triangle", "/easymesh"]
 
 [dependencies]
 rgb = "0.8"
+ndarray = { version = "0.15.4", optional = true }
