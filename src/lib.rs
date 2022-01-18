@@ -246,7 +246,7 @@ pub trait Mesh: Pslg {
     /// ```
     /// use mesh::Mesh;
     /// use rgb::{RGB, RGB8};
-    /// const RED: RGB8 = RGB {r: 255, g: 0, b: 0 };
+    /// const RED: RGB8 = RGB {r: 255, g: 0, b: 0};
     /// # fn test<M: Mesh>(mesh: M) -> std::io::Result<()> {
     /// // Assume `mesh` is a value of a type implementing `Mesh`
     /// // and that, for this example, `mesh.n_points()` is 4.
@@ -410,8 +410,8 @@ pub trait Permutable: Mesh {
 //
 // LaTeX Output
 
-const BLACK: RGB8 = RGB {r: 0, g: 0, b: 0 };
-const GREY: RGB8 = RGB {r: 150, g: 150, b: 150 };
+const BLACK: RGB8 = RGB {r: 0, g: 0, b: 0};
+const GREY: RGB8 = RGB {r: 150, g: 150, b: 150};
 
 macro_rules! default_mesh_color {
     ($s: ident) => { |i| { if $s.mesh.edge_marker(i) == 0 { Some(GREY) }
@@ -454,7 +454,7 @@ where L: IntoIterator<Item=(f64, RGB8)>{
 /// ```
 /// use mesh::Mesh;
 /// use rgb::{RGB, RGB8};
-/// const RED: RGB8 = RGB {r: 255, g: 0, b: 0 };
+/// const RED: RGB8 = RGB {r: 255, g: 0, b: 0};
 /// # fn test<M: Mesh>(mesh: M) -> std::io::Result<()> {
 /// // Assume `mesh` is a value of a type implementing `Mesh`
 /// // and that, for this example, `mesh.n_points()` is 4.
@@ -479,7 +479,7 @@ where M: Mesh,
     /// ```
     /// use mesh::Mesh;
     /// use rgb::{RGB, RGB8};
-    /// const BLACK: RGB8 = RGB {r: 0, g: 0, b: 0 };
+    /// const BLACK: RGB8 = RGB {r: 0, g: 0, b: 0};
     /// # fn test<M: Mesh>(mesh: M) -> std::io::Result<()> {
     /// // Assume `mesh` is a value of a type implementing `Mesh`
     /// // and that, for this example, `mesh.n_points()` is 4.
