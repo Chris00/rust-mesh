@@ -1,7 +1,7 @@
 //! Generic mesh structure to be used with various meshers.  Also
 //! provide some functions to help to display and design geometries.
 
-use std::{collections::VecDeque,
+use std::{collections::{VecDeque, HashSet},
           io::{self, Write},
           fmt::{self, Display, Formatter},
           fs,
@@ -447,8 +447,9 @@ macro_rules! default_level_color {
 enum Action<'a> {
     Mesh,
     Levels(Box<dyn P1 + 'a>),
-    SuperLevels(Box<dyn P1 + 'a>),
-    SubLevels(Box<dyn P1 + 'a>) }
+    SuperLevels(Box<dyn P1 + 'a>), // levels in increasing order
+    SubLevels(Box<dyn P1 + 'a>) // levels in decreasing order
+}
 
 /// LaTeX output.  Created by [`Mesh::latex`].
 pub struct LaTeX<'a, M>
@@ -461,13 +462,24 @@ where M: Mesh + ?Sized {
     levels: Vec<(f64, RGB8)>,
 }
 
-fn valid_levels<L>(l: L) -> Vec<(f64, RGB8)>
+/// Only keep levels that are finite.
+fn sanitize_levels<L>(l: L) -> Vec<(f64, RGB8)>
 where L: IntoIterator<Item=(f64, RGB8)>{
     l.into_iter().filter(|(x, _)| x.is_finite()).collect()
 }
 
+macro_rules! do_not_sort_levels { ($l: expr) => { $l }}
+macro_rules! sort_levels_incr { ($l: expr) => {{
+    let mut levels = $l;
+    levels.sort_by(|(l1, _), (l2, _)| l1.partial_cmp(l2).unwrap());
+    levels }}}
+macro_rules! sort_levels_decr { ($l: expr) => {{
+    let mut levels = $l;
+    levels.sort_by(|(l1, _), (l2, _)| l2.partial_cmp(l1).unwrap());
+    levels }}}
+
 macro_rules! meth_levels {
-    ($(#[$meta:meta])* $meth: ident, $act: ident) => {
+    ($(#[$meta:meta])* $meth: ident, $act: ident, $sort: ident) => {
         $(#[$meta])*
         pub fn $meth<Z, L>(self, z: Z, levels: L) -> LaTeX<'a, M>
         where Z: P1 + 'a,
@@ -475,18 +487,156 @@ macro_rules! meth_levels {
             if z.len() != self.mesh.n_points() {
                 panic!("mesh::LaTeX::{}: z.len() == {}, expected {}",
                        stringify!($meth), z.len(), self.mesh.n_points()) }
+            let levels = $sort!(sanitize_levels(levels));
             LaTeX { mesh: self.mesh,  edge_color: self.edge_color,
-                    action: Action::$act(Box::new(z)),
-                    levels: valid_levels(levels) }
+                    action: Action::$act(Box::new(z)), levels }
         }
     }
 }
+
+fn mid((x1, y1): (f64, f64), (x2, y2): (f64, f64)) -> (f64, f64) {
+    (0.5 * (x1 + x2), 0.5 * (y1 + y2))
+}
+
+fn intercept((x1, y1): (f64, f64), z1: f64, (x2, y2): (f64, f64), z2: f64,
+             level: f64) -> (f64, f64) {
+    let d = z1 - z2;
+    let a = level - z2;
+    let b = z1 - level;
+    ((a * x1 + b * x2) / d,  (a * y1 + b * y2) / d)
+}
+
+fn line<W: Write>(w: &mut W, c: RGB8,
+                  (x0,y0): (f64,f64), (x1,y1): (f64,f64)) -> io::Result<()> {
+    write!(w, "  \\meshline{{{},{},{}}}{{{:.12}}}{{{:.12}}}\
+               {{{:.12}}}{{{:.12}}}\n", c.r, c.g, c.b, x0, y0, x1, y1)
+}
+
+fn point<W: Write>(w: &mut W, c: RGB8,
+                   i: usize, (x,y): (f64,f64)) -> io::Result<()> {
+    write!(w, "  \\meshpoint{{{},{},{}}}{{{}}}{{{:.12}}}{{{:.12}}}\n",
+           c.r, c.g, c.b, i, x, y)
+}
+
+fn triangle<W: Write>(w: &mut W, c: RGB8,
+                      (x1,y1): (f64,f64), (x2,y2): (f64,f64),
+                      (x3,y3): (f64,f64)) -> io::Result<()> {
+    write!(w, "  \\meshtriangle{{{},{},{}}}{{{:.12}}}{{{:.12}}}\
+               {{{:.12}}}{{{:.12}}}{{{:.12}}}{{{:.12}}}\n",
+           c.r, c.g, c.b, x1, y1, x2, y2, x3, y3)
+}
+
+fn fill_triangle<W: Write>(w: &mut W, c: RGB8,
+                           (x1,y1): (f64,f64), (x2,y2): (f64,f64),
+                           (x3,y3): (f64,f64)) -> io::Result<()> {
+    write!(w, "  \\meshfilltriangle{{{},{},{}}}{{{:.12}}}{{{:.12}}}\
+               {{{:.12}}}{{{:.12}}}{{{:.12}}}{{{:.12}}}\n",
+           c.r, c.g, c.b, x1, y1, x2, y2, x3, y3)
+}
+
+fn fill_quadrilateral<W: Write>(
+    w: &mut W, c: RGB8, (x1,y1): (f64,f64), (x2,y2): (f64,f64),
+    (x3,y3): (f64,f64), (x4,y4): (f64,f64)) -> io::Result<()> {
+    write!(w, "  \\meshfillquadrilateral{{{},{},{}}}{{{:.12}}}{{{:.12}}}\
+               {{{:.12}}}{{{:.12}}}{{{:.12}}}{{{:.12}}}{{{:.12}}}{{{:.12}}}\n",
+           c.r, c.g, c.b, x1, y1, x2, y2, x3, y3, x4, y4)
+}
+
+/// Levels considered equal (to draw level curves).
+// FIXME: need to make it customizable?
+fn level_eq(l1: f64, l2: f64) -> bool {
+    (l1 - l2).abs() <= 1e-8 * (l1.abs() + l2.abs())
+}
+
+/// Hold the boundary edges (to draw level curves).
+type BdryEdges = HashSet<(usize, usize)>;
+
+fn boundary_edges(m: &impl Mesh) -> BdryEdges {
+    let mut bdry = HashSet::new();
+    for i in 0 .. m.n_edges() {
+        // (i1, i2) = m.edge(i) ⇒ i1 ≤ i2
+        if m.edge_marker(i) != 0 { bdry.insert(m.edge(i)); }
+    }
+    bdry
+}
+
+fn on_boundary(bdry: &BdryEdges, i1: usize, i2: usize) -> bool {
+    bdry.contains(&if i1 <= i2 { (i1, i2) } else { (i2, i1) })
+}
+
+macro_rules! keep_order { ($o: expr) => { $o } }
+macro_rules! reverse_order { ($o: expr) => { $o.reverse() } }
+
+/// Designed for super-levels, reverse the ordering for sub-levels.
+macro_rules! write_xxx_levels {
+    ($w: ident, $m: ident, $z: ident, $levels: expr, $rev: ident) => {
+        for t in 0 .. $m.n_triangles() {
+            let (i1, i2, i3) = $m.triangle(t);
+            let p1 = $m.point(i1);
+            let z1 = $z.index(i1);
+            let p2 = $m.point(i2);
+            let z2 = $z.index(i2);
+            let p3 = $m.point(i3);
+            let z3 = $z.index(i3);
+            for &(l, color) in &$levels {
+                use std::cmp::Ordering::*;
+                // Only finite values have been kept.
+                match ($rev!(z1.partial_cmp(&l).unwrap()),
+                       $rev!(z2.partial_cmp(&l).unwrap()),
+                       $rev!(z3.partial_cmp(&l).unwrap())) {
+                    (Greater, Greater | Equal, Greater | Equal)
+                        | (Equal, Greater, Greater | Equal)
+                        | (Equal, Equal, Greater) => {
+                            // (Equal, Equal, Equal) not accepted
+                            // because strict superlevel.
+                            fill_triangle($w, color, p1, p2, p3)?
+                        }
+                    (Greater, Greater, Less) => { // Cut edges 1-3, 3-2
+                        fill_quadrilateral($w, color, p2, p1,
+                                           intercept(p1,z1, p3,z3, l),
+                                           intercept(p3,z3, p2,z2, l))?
+                    }
+                    (Greater, Less, Greater) => { // Cut edges 3-2, 2-1
+                        fill_quadrilateral($w, color, p1, p3,
+                                           intercept(p3,z3, p2,z2, l),
+                                           intercept(p2,z2, p1,z1, l))?
+                    }
+                    (Less, Greater, Greater) => { // Cut edges 2-1, 1-3
+                        fill_quadrilateral($w, color, p3, p2,
+                                           intercept(p2,z2, p1,z1, l),
+                                           intercept(p1,z1, p3,z3, l))?
+                    }
+                    // (Greater, Equal, Equal) rightly matched before.
+                    (Greater, Equal | Less, Equal | Less) => {
+                        fill_triangle($w, color, p1,
+                                      intercept(p1,z1, p2,z2, l),
+                                      intercept(p1,z1, p3,z3, l))?
+                    }
+                    (Equal | Less, Greater, Equal | Less) => {
+                        fill_triangle($w, color, p2,
+                                      intercept(p2,z2, p1,z1, l),
+                                      intercept(p2,z2, p3,z3, l))?
+                    }
+                    (Equal | Less, Equal | Less, Greater) => {
+                        fill_triangle($w, color, p3,
+                                      intercept(p3,z3, p1,z1, l),
+                                      intercept(p3,z3, p2,z2, l))?
+                    }
+                    // Nothing to color
+                    (Equal | Less, Equal | Less, Equal | Less) => {}
+                }
+            }
+        }
+        write!($w, "{}", LATEX_END)?;
+    }
+}
+
 
 /// # LaTeX output
 ///
 /// LaTex output is given in terms of three macros
 /// `\meshline{R,G,B}{x1}{y1}{x2}{y2}`,
-/// `\meshpoint{point number}{x}{y}`, and
+/// `\meshpoint{R,G,B}{point number}{x}{y}`, and
 /// `\meshtriangle{R,G,B}{x1}{y1}{x2}{y2}{x3}{y3}` to respectively
 /// plot edges, points and (filled) triangles.  You can easily
 /// customize them in your LaTeX file.  If you do not provide your own
@@ -509,7 +659,7 @@ macro_rules! meth_levels {
 /// [tikz]: https://sourceforge.net/projects/pgf/
 impl<'a, M> LaTeX<'a, M>
 where M: Mesh {
-    /// Use the function `edge_color` to color the edges. 
+    /// Use the function `edge_color` to color the edges.
     /// The return value of `edge_color(i)` specifies the color of the
     /// edge numbered `i`.  If `edge_color(i)` returns `None`, the
     /// edge is not drawn.
@@ -535,11 +685,11 @@ where M: Mesh {
     }
 
     meth_levels!(/// Specify that one wants to draw the level curves of `z`.
-        level_curves, Levels);
+        level_curves, Levels, do_not_sort_levels);
     meth_levels!(/// Specify that one wants to draw the super-levels of `z`.
-        super_levels, SuperLevels);
+        super_levels, SuperLevels, sort_levels_incr);
     meth_levels!(/// Specify that one wants to draw the sub-levels of `z`.
-        sub_levels, SubLevels);
+        sub_levels, SubLevels, sort_levels_decr);
 
     /// Write the mesh `self` to the writer `w`.
     // Pass any `edge_color` so one can use the same value to both
@@ -549,43 +699,141 @@ where M: Mesh {
           E: Fn(usize) -> Option<RGB8> {
         let m = self.mesh;
         write!(w, "{}", LATEX_BEGIN)?;
-        // Write lines
+        // Write points
+        write!(w, "  % {} points", m.n_points())?;
+        for i in 0 .. m.n_points() { point(w, BLACK, i, m.point(i))? }
+        // Write lines (on top of points)
         write!(w, "% {} triangles\n", m.n_triangles())?;
         for i in 0 .. m.n_edges() {
             match edge_color(i) {
-                None => (),
                 Some(c) => {
                     let (p1, p2) = m.edge(i);
-                    let (x1, y1) = m.point(p1);
-                    let (x2, y2) = m.point(p2);
-                    write!(w, "  \\meshline{{{},{},{}}}{{{:.12}}}\
-                                       {{{:.12}}}{{{:.12}}}{{{:.12}}}\n",
-                           c.r, c.g, c.b, x1, y1, x2, y2)?;
+                    line(w, c, m.point(p1), m.point(p2))?;
                 }
+                None => ()
             }
-        }
-        // Write points
-        write!(w, "  % {} points", m.n_points())?;
-        for i in 0 .. m.n_points() {
-            let (x, y) = m.point(i);
-            write!(w, "  \\meshpoint{{{}}}{{{:.12}}}{{{:.12}}}\n",
-                   i, x, y)?;
         }
         Ok(())
     }
 
     fn write_levels<W,E>(&self, w: &mut W, edge_color: E, z: &dyn P1)
-                           -> io::Result<()>
+                         -> io::Result<()>
     where W: Write,
           E: Fn(usize) -> Option<RGB8> {
         let m = self.mesh;
         self.write_mesh_begin(w, edge_color)?;
+        let bdry = boundary_edges(m);
         // Write level lines for each triangle.
         for t in 0 .. m.n_triangles() {
             let (i1, i2, i3) = m.triangle(t);
-            let (x1, y1) = m.point(i1);
-            let (x2, y2) = m.point(i2);
-            let (x3, y3) = m.point(i3);
+            let p1 = m.point(i1);
+            let z1 = z.index(i1);
+            let p2 = m.point(i2);
+            let z2 = z.index(i2);
+            let p3 = m.point(i3);
+            let z3 = z.index(i3);
+            for &(l, color) in &self.levels {
+                // Draw the level curve [l] on the triangle [t] except
+                // if that curve is on the boundary.
+                if level_eq(l, z1) {
+                    if level_eq(l, z2) {
+                        if level_eq(l, z3) {
+                            // The entire triangle is at the same
+                            // level.  Try to remove boundary edges.
+                            if on_boundary(&bdry, i1, i2) {
+                                if on_boundary(&bdry, i1, i3)
+                                    || on_boundary(&bdry, i2, i3) {
+                                        triangle(w, color, p1, p2, p3)?
+                                    }
+                                else {
+                                    line(w, color, p3, mid(p1, p2))?
+                                }
+                            } else { // i1-i2 not on boundary
+                                if on_boundary(&bdry, i1, i3) {
+                                    if on_boundary(&bdry, i2, i3) {
+                                        triangle(w, color, p1, p2, p3)?
+                                    } else {
+                                        line(w, color, p2, mid(p1, p3))?
+                                    }
+                                } else { // i1-i3 not on boundary
+                                    if on_boundary(&bdry, i2, i3) {
+                                        line(w, color, p1, mid(p2, p3))?
+                                    } else {
+                                        triangle(w, color, p1, p2, p3)?
+                                    }
+                                }
+                            }
+                        } else { // l = z1 = z2 ≠ z3
+                            if ! on_boundary(&bdry, i1, i2) {
+                                line(w, color, p1, p2)?
+                            }
+                        }
+                    } else { // l = z1 ≠ z2
+                        if level_eq(l, z3) { // l = z1 = z3 ≠ z2
+                            if ! on_boundary(&bdry, i1, i3) {
+                                line(w, color, p1, p3)?
+                            } else {
+                                if (z2 < l && l < z3) || (z3 < l && l < z2) {
+                                line(w, color, p1,
+                                     intercept(p2, z2, p3, z3, l))?
+                                }
+                            }
+                        }
+                    }
+                } else if l < z1 {
+                    if level_eq(l, z2) {
+                        if level_eq(l, z3) { // l = z2 = z3 < z1
+                            if ! on_boundary(&bdry, i2, i3) {
+                                line(w, color, p2, p3)?
+                            }
+                        } else if l > z3 { // z3 < l = z2 < z1
+                            line(w, color, p2, intercept(p1,z1, p3,z3, l))?
+                        } else { // l = z2 < min{z1, z3}
+                            // Corner point, inside the domain.
+                            // Ususally this happens because the level
+                            // line passes through a triangle corner.
+                            point(w, color, i2, p2)?
+                        }
+                    } else if l < z2 {
+                        if level_eq(l, z3) { // l = z3 < min{z1, z2}
+                            point(w, color, i3, p3)?
+                        } else if l > z3 { // z3 < l < min{z1, z2}
+                            line(w, color, intercept(p1,z1, p3,z3, l),
+                                 intercept(p2,z2, p3,z3, l))?
+                        }
+                    } else { // z2 < l < z1
+                        line(w, color, intercept(p1,z1, p2,z2, l),
+                             if level_eq(l, z3) { p3 }
+                             else if l < z3 { intercept(p2,z2, p3,z3, l) }
+                             else { intercept(p1,z1, p3,z3, l) })?
+                    }
+                } else { // l > z1
+                    // Symmetric of `l < z1` with all inequalities reversed
+                    if level_eq(l, z2) {
+                        if level_eq(l, z3) {
+                            if ! on_boundary(&bdry, i2, i3) {
+                                line(w, color, p2, p3)?
+                            }
+                        } else if l < z3 { // z1 < l = z2 < z3
+                            line(w, color, p2, intercept(p1,z1, p3,z3, l))?
+                        } else { // Corner point, inside the domain
+                            point(w, color, i2, p2)?
+                        }
+                    } else if l > z2 {
+                        if level_eq(l, z3) {
+                            point(w, color, i3, p3)?
+                        } else if l < z3 {
+                            line(w, color, intercept(p1,z1, p3,z3, l),
+                                 intercept(p2,z2, p3,z3, l))?
+                        }
+                    } else { // z1 < l < z2
+                        line(w, color, intercept(p1,z1, p2,z2, l),
+                             if level_eq(l, z3) { p3 }
+                             else if l > z3 { intercept(p2,z2, p3,z3, l) }
+                             else { intercept(p1,z1, p3,z3, l) })?
+                    }
+                }
+            }
         }
         write!(w, "{}", LATEX_END)
     }
@@ -596,8 +844,8 @@ where M: Mesh {
           E: Fn(usize) -> Option<RGB8> {
         let m = self.mesh;
         self.write_mesh_begin(w, edge_color)?;
-
-        write!(w, "{}", LATEX_END)
+        write_xxx_levels!(w, m, z, self.levels, keep_order);
+        Ok(())
     }
 
     fn write_sublevels<W,E>(&self, w: &mut W, edge_color: E, z: &dyn P1)
@@ -606,8 +854,8 @@ where M: Mesh {
           E: Fn(usize) -> Option<RGB8> {
         let m = self.mesh;
         self.write_mesh_begin(w, edge_color)?;
-
-        write!(w, "{}", LATEX_END)
+        write_xxx_levels!(w, m, z, self.levels, reverse_order);
+        Ok(())
     }
 
     /// Write the mesh or the levels/superlevels/sublevels to `w`.
@@ -667,8 +915,8 @@ const LATEX_BEGIN: &str =
       \pgfpathlineto{\pgfpointxy{#4}{#5}}
       \pgfusepath{stroke}
     \end{pgfscope}}
-  % \meshpoint{point number}{x}{y}
-  \providecommand{\meshpoint}[3]{}\n";
+  % \meshpoint{R,G,B}{point number}{x}{y}
+  \providecommand{\meshpoint}[4]{}\n";
   % \meshtriangle{R,G,B}{x1}{y1}{x2}{y2}{x3}{y3}\n";
   \providecommand{\meshtriangle}[7]{%
     \begin{pgfscope}
