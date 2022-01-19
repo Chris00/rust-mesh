@@ -497,8 +497,7 @@ macro_rules! meth_levels {
                 panic!("mesh::LaTeX::{}: z.len() == {}, expected {}",
                        stringify!($meth), z.len(), self.mesh.n_points()) }
             let levels = $sort!(sanitize_levels(levels));
-            LaTeX { mesh: self.mesh,  edge_color: self.edge_color,
-                    action: Action::$act(Box::new(z)), levels }
+            LaTeX { action: Action::$act(Box::new(z)), levels, .. self }
         }
     }
 }
@@ -687,10 +686,9 @@ where M: Mesh {
     ///                       else { None });
     /// # Ok(()) }
     /// ```
-    pub fn edge<E>(self, edge_color: E) -> LaTeX<'a, M>
+    pub fn edge<E>(self, edge_color: E) -> Self
     where E: Fn(usize) -> Option<RGB8> + 'a {
-        LaTeX { mesh: self.mesh,  edge_color: Some(Box::new(edge_color)),
-                action: self.action,  levels: self.levels }
+        LaTeX { edge_color: Some(Box::new(edge_color)), .. self }
     }
 
     meth_levels!(/// Specify that one wants to draw the level curves of `z`.
