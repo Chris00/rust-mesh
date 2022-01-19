@@ -251,7 +251,7 @@ pub trait Mesh: Pslg {
     /// // Assume `mesh` is a value of a type implementing `Mesh`
     /// // and that, for this example, `mesh.n_points()` is 4.
     /// let levels = [(1.5, RED)];
-    /// mesh.latex().sub_levels(&[1., 2., 3., 4.], levels).save("/tmp/foo")?;
+    /// mesh.latex().sub_levels([1., 2., 3., 4.], levels).save("/tmp/foo")?;
     /// # Ok(()) }
     /// ```
     fn latex<'a>(&'a self) -> LaTeX<'a, Self> {
@@ -269,7 +269,7 @@ pub trait Mesh: Pslg {
     /// # fn test<M: Mesh>(mesh: M) -> std::io::Result<()> {
     /// // Assume `mesh` is a value of a type implementing `Mesh`
     /// // and that, for this example, `mesh.n_points()` is 4.
-    /// mesh.scilab(&[1., 2., 3., 4.]).save("/tmp/foo");
+    /// mesh.scilab([1., 2., 3., 4.]).save("/tmp/foo");
     /// # Ok(()) }
     /// ```
     fn scilab<'a, Z>(&'a self, z: &'a Z) -> Scilab<'a, Self, Z>
@@ -416,6 +416,11 @@ pub trait P1 {
     fn len(&self) -> usize;
     /// The value of the function at the point of index `i`.
     fn index(&self, i: usize) -> f64;
+}
+
+impl<const N: usize> P1 for [f64; N] {
+    fn len(&self) -> usize { <[f64]>::len(self) }
+    fn index(&self, i: usize) -> f64 { self[i] }
 }
 
 impl<const N: usize> P1 for &[f64; N] {
@@ -652,7 +657,7 @@ macro_rules! write_xxx_levels {
 /// // Assume `mesh` is a value of a type implementing `Mesh`
 /// // and that, for this example, `mesh.n_points()` is 4.
 /// let levels = [(1.5, RED)];
-/// mesh.latex().sub_levels(&[1., 2., 3., 4.], levels).save("/tmp/foo")?;
+/// mesh.latex().sub_levels([1., 2., 3., 4.], levels).save("/tmp/foo")?;
 /// # Ok(()) }
 /// ```
 ///
