@@ -143,6 +143,21 @@ impl AsRef<Vec<usize>> for Permutation {
 
 ////////////////////////////////////////////////////////////////////////
 //
+// Basic colors
+
+const BLACK: RGB8 = RGB {r: 0, g: 0, b: 0};
+const GREY: RGB8 = RGB {r: 150, g: 150, b: 150};
+
+macro_rules! default_mesh_color {
+    ($m: expr) => { |i| { if $m.edge_marker(i) == 0 { Some(GREY) }
+                          else { Some(BLACK) } }}}
+
+macro_rules! default_level_color {
+    ($s: ident) => { |i| { if $s.mesh.edge_marker(i) != 0 { Some(BLACK) }
+                           else { None } }}}
+
+////////////////////////////////////////////////////////////////////////
+//
 // PSLG & meshes
 
 /// A bounding box in ℝ².  It is required that `xmin` ≤ `xmax` and
@@ -437,17 +452,6 @@ impl P1 for ndarray::Array1<f64> {
 ////////////////////////////////////////////////////////////////////////
 //
 // LaTeX Output
-
-const BLACK: RGB8 = RGB {r: 0, g: 0, b: 0};
-const GREY: RGB8 = RGB {r: 150, g: 150, b: 150};
-
-macro_rules! default_mesh_color {
-    ($s: ident) => { |i| { if $s.mesh.edge_marker(i) == 0 { Some(GREY) }
-                           else { Some(BLACK) } }}}
-
-macro_rules! default_level_color {
-    ($s: ident) => { |i| { if $s.mesh.edge_marker(i) != 0 { Some(BLACK) }
-                           else { None } }}}
 
 enum Action<'a> {
     Mesh,
