@@ -287,14 +287,18 @@ pub trait Mesh: Pslg {
     /// mesh.scilab([1., 2., 3., 4.]).save("/tmp/foo");
     /// # Ok(()) }
     /// ```
-    fn scilab<'a, Z>(&'a self, z: &'a Z) -> Scilab<'a, Self, Z>
-    where Z: IntoIterator<Item=f64> {
-        // It would be nice to panic if z.len() ≠ self.n_points() but,
-        // with this generality, it will be done when we use the iterrator.
-        Scilab { mesh: self, z,
+    fn scilab<'a, Z>(&'a self, z: Z) -> Scilab<'a, Self>
+    where Z: P1 + 'a {
+        if z.len() != self.n_points() {
+            panic!("mesh::Mesh::scilab: z.len() = {} but expected {}",
+                   z.len(), self.n_points());
+        }
+        let edge_color = Box::new(default_mesh_color!(self));
+        Scilab { mesh: self, z: Box::new(z),
                  longitude: 70.,  azimuth: 60.,
                  mode: Mode::Triangles,
-                 draw_box: DrawBox::Full }
+                 draw_box: DrawBox::Full,
+                 edge_color }
     }
 
 }
@@ -875,7 +879,7 @@ where M: Mesh {
         match &self.action {
             Action::Mesh => match &self.edge_color {
                 None => {
-                    self.write_mesh_begin(w, default_mesh_color!(self))?;
+                    self.write_mesh_begin(w, default_mesh_color!(self.mesh))?;
                     write!(w, "{}", LATEX_END)
                 }
                 Some(e) => {
@@ -988,31 +992,42 @@ pub enum DrawBox {
 }
 
 /// Scilab Output.  Created by [`Mesh::scilab`].
-pub struct Scilab<'a, M, Z>
+pub struct Scilab<'a, M>
 where M: Mesh + ?Sized {
     mesh: &'a M,
-    z: &'a Z,
+    z: Box<dyn P1 + 'a>,
     longitude: f64,
     azimuth: f64,
     mode: Mode,
     draw_box: DrawBox,
+    edge_color: Box<dyn Fn(usize) -> Option<RGB8> + 'a>,
 }
 
-impl<'a, M, Z> Scilab<'a, M, Z>
-where M: Mesh,
-      Z: IntoIterator<Item=f64> {
+impl<'a, M> Scilab<'a, M>
+where M: Mesh {
     /// Set sets the longitude to `l` degrees of the observation point.
     pub fn longitude(self, l: f64) -> Self {
-        Scilab { mesh: self.mesh,  z: self.z,
-                 longitude: l,  azimuth: self.azimuth,
-                 mode: self.mode,  draw_box: self.draw_box }
+        Scilab { longitude: l, .. self }
     }
 
     /// Sets the azimuth to `a` degrees of the observation point.
     pub fn azimuth(self, a: f64) -> Self {
-        Scilab { mesh: self.mesh,  z: self.z,
-                 longitude: self.longitude,  azimuth: a,
-                 mode: self.mode,  draw_box: self.draw_box }
+        Scilab { azimuth: a, .. self }
+    }
+
+    /// Set the mode for the drawing.
+    pub fn mode(self, mode: Mode) -> Self { Scilab { mode, .. self } }
+
+    /// Specify how what the box arounf the plot should look like.
+    pub fn draw_box(self, draw_box: DrawBox) -> Self {
+        Scilab { draw_box, .. self }
+    }
+
+    /// Use the function `edge_color` to color the edges.
+    /// See [`Mesh::edge`] for details.
+    pub fn edge<E>(self, edge_color: E) -> Self
+    where E: Fn(usize) -> Option<RGB8> + 'a {
+        Scilab { edge_color: Box::new(edge_color), .. self }
     }
 
     fn write<W>(&self, w: &mut W) -> Result<(), io::Error>
