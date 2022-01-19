@@ -574,7 +574,8 @@ where M: Mesh {
         Ok(())
     }
 
-    fn write_levels<W,E>(&self, w: &mut W, edge_color: E) -> io::Result<()>
+    fn write_levels<W,E>(&self, w: &mut W, edge_color: E, z: &dyn P1)
+                           -> io::Result<()>
     where W: Write,
           E: Fn(usize) -> Option<RGB8> {
         let m = self.mesh;
@@ -589,7 +590,8 @@ where M: Mesh {
         write!(w, "{}", LATEX_END)
     }
 
-    fn write_superlevels<W,E>(&self, w: &mut W, edge_color: E) -> io::Result<()>
+    fn write_superlevels<W,E>(&self, w: &mut W, edge_color: E, z: &dyn P1)
+                              -> io::Result<()>
     where W: Write,
           E: Fn(usize) -> Option<RGB8> {
         let m = self.mesh;
@@ -598,7 +600,8 @@ where M: Mesh {
         write!(w, "{}", LATEX_END)
     }
 
-    fn write_sublevels<W,E>(&self, w: &mut W, edge_color: E) -> io::Result<()>
+    fn write_sublevels<W,E>(&self, w: &mut W, edge_color: E, z: &dyn P1)
+                            -> io::Result<()>
     where W: Write,
           E: Fn(usize) -> Option<RGB8> {
         let m = self.mesh;
@@ -610,7 +613,7 @@ where M: Mesh {
     /// Write the mesh or the levels/superlevels/sublevels to `w`.
     pub fn write<W>(&self, w: &mut W) -> Result<(), io::Error>
     where W: Write {
-        match self.action {
+        match &self.action {
             Action::Mesh => match &self.edge_color {
                 None => {
                     self.write_mesh_begin(w, default_mesh_color!(self))?;
@@ -621,17 +624,23 @@ where M: Mesh {
                     write!(w, "{}", LATEX_END)
                 }
             }
-            Action::Levels => match &self.edge_color {
-                None => self.write_levels(w, default_level_color!(self)),
-                Some(e) => self.write_levels(w, e)
+            Action::Levels(u) => match &self.edge_color {
+                None =>
+                    self.write_levels(w, default_level_color!(self), &**u),
+                Some(e) =>
+                    self.write_levels(w, e, &**u)
             }
-            Action::SuperLevels => match &self.edge_color {
-                None => self.write_superlevels(w, default_level_color!(self)),
-                Some(e) => self.write_levels(w, e)
+            Action::SuperLevels(u) => match &self.edge_color {
+                None =>
+                    self.write_superlevels(w, default_level_color!(self), &**u),
+                Some(e) =>
+                    self.write_superlevels(w, e, &**u)
             }
-            Action::SubLevels => match &self.edge_color {
-                None => self.write_sublevels(w, default_level_color!(self)),
-                Some(e) => self.write_levels(w, e)
+            Action::SubLevels(u) => match &self.edge_color {
+                None =>
+                    self.write_sublevels(w, default_level_color!(self), &**u),
+                Some(e) =>
+                    self.write_sublevels(w, e, &**u)
             }
         }
     }
