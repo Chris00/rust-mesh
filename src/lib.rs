@@ -686,9 +686,13 @@ where M: Mesh {
 
     meth_levels!(/// Specify that one wants to draw the level curves of `z`.
         level_curves, Levels, do_not_sort_levels);
-    meth_levels!(/// Specify that one wants to draw the super-levels of `z`.
+    meth_levels!(
+        /// Specify that one wants to draw the strict super-levels
+        /// `levels` of `z`.
         super_levels, SuperLevels, sort_levels_incr);
-    meth_levels!(/// Specify that one wants to draw the sub-levels of `z`.
+    meth_levels!(
+        /// Specify that one wants to draw the strict sub-levels
+        /// `levels` of `z`.
         sub_levels, SubLevels, sort_levels_decr);
 
     /// Write the mesh `self` to the writer `w`.
