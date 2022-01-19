@@ -256,7 +256,7 @@ pub trait Mesh: Pslg {
     /// ```
     fn latex<'a>(&'a self) -> LaTeX<'a, Self> {
         LaTeX { mesh: &self,  edge_color: None,
-                action: Action::Mesh, z: None, levels: vec![] }
+                action: Action::Mesh, levels: vec![] }
     }
 
     /// Graph the vector `z` defined on the mesh `self` using Scilab.
@@ -444,8 +444,11 @@ macro_rules! default_level_color {
     ($s: ident) => { |i| { if $s.mesh.edge_marker(i) != 0 { Some(BLACK) }
                            else { None } }}}
 
-#[derive(Debug, Clone, Copy)]
-enum Action { Mesh, Levels, SuperLevels, SubLevels }
+enum Action<'a> {
+    Mesh,
+    Levels(Box<dyn P1 + 'a>),
+    SuperLevels(Box<dyn P1 + 'a>),
+    SubLevels(Box<dyn P1 + 'a>) }
 
 /// LaTeX output.  Created by [`Mesh::latex`].
 pub struct LaTeX<'a, M>
@@ -454,14 +457,29 @@ where M: Mesh + ?Sized {
     // The "dyn" option was chosen because it avoids having a type
     // parameter for the closure passed on.  This type may confuse the user.
     edge_color: Option<Box<dyn Fn(usize) -> Option<RGB8> + 'a>>,
-    action: Action,
-    z: Option<Box<dyn P1 + 'a>>,
+    action: Action<'a>,
     levels: Vec<(f64, RGB8)>,
 }
 
 fn valid_levels<L>(l: L) -> Vec<(f64, RGB8)>
 where L: IntoIterator<Item=(f64, RGB8)>{
     l.into_iter().filter(|(x, _)| x.is_finite()).collect()
+}
+
+macro_rules! meth_levels {
+    ($(#[$meta:meta])* $meth: ident, $act: ident) => {
+        $(#[$meta])*
+        pub fn $meth<Z, L>(self, z: Z, levels: L) -> LaTeX<'a, M>
+        where Z: P1 + 'a,
+              L: IntoIterator<Item=(f64, RGB8)> {
+            if z.len() != self.mesh.n_points() {
+                panic!("mesh::LaTeX::{}: z.len() == {}, expected {}",
+                       stringify!($meth), z.len(), self.mesh.n_points()) }
+            LaTeX { mesh: self.mesh,  edge_color: self.edge_color,
+                    action: Action::$act(Box::new(z)),
+                    levels: valid_levels(levels) }
+        }
+    }
 }
 
 /// # LaTeX output
@@ -513,35 +531,15 @@ where M: Mesh {
     pub fn edge<E>(self, edge_color: E) -> LaTeX<'a, M>
     where E: Fn(usize) -> Option<RGB8> + 'a {
         LaTeX { mesh: self.mesh,  edge_color: Some(Box::new(edge_color)),
-                action: self.action, z: self.z,  levels: self.levels }
+                action: self.action,  levels: self.levels }
     }
 
-    /// Specify that one wants to draw the level curves of `z`.
-    pub fn level_curves<Z, L>(self, z: Z, levels: L) -> LaTeX<'a, M>
-    where Z: P1 + 'a,
-          L: IntoIterator<Item=(f64, RGB8)> {
-        LaTeX { mesh: self.mesh,  edge_color: self.edge_color,
-                action: Action::Levels,
-                z: Some(Box::new(z)),  levels: valid_levels(levels) }
-    }
-
-    /// Specify that one wants to draw the super-levels of `z`.
-    pub fn super_levels<Z, L>(self, z: Z, levels: L) -> LaTeX<'a, M>
-        where Z: P1 + 'a,
-              L: IntoIterator<Item=(f64, RGB8)> {
-        LaTeX { mesh: self.mesh,  edge_color: self.edge_color,
-                action: Action::SuperLevels,
-                z: Some(Box::new(z)),  levels: valid_levels(levels) }
-    }
-
-    /// Specify that one wants to draw the sub-levels of `z`.
-    pub fn sub_levels<Z, L>(self, z: Z, levels: L) -> LaTeX<'a, M>
-    where Z: P1 + 'a,
-          L: IntoIterator<Item=(f64, RGB8)> {
-        LaTeX { mesh: self.mesh,  edge_color: self.edge_color,
-                action: Action::SubLevels,
-                z: Some(Box::new(z)),  levels: valid_levels(levels) }
-    }
+    meth_levels!(/// Specify that one wants to draw the level curves of `z`.
+        level_curves, Levels);
+    meth_levels!(/// Specify that one wants to draw the super-levels of `z`.
+        super_levels, SuperLevels);
+    meth_levels!(/// Specify that one wants to draw the sub-levels of `z`.
+        sub_levels, SubLevels);
 
     /// Write the mesh `self` to the writer `w`.
     // Pass any `edge_color` so one can use the same value to both
