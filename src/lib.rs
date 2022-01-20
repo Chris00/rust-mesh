@@ -9,6 +9,9 @@ use std::{collections::{VecDeque, HashSet, HashMap},
           path::{Path, PathBuf}};
 use rgb::{RGB, RGB8};
 
+#[cfg(feature = "density-mesh-core")]
+mod density_mesh;
+
 ////////////////////////////////////////////////////////////////////////
 //
 // Permutations

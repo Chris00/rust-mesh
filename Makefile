@@ -1,4 +1,4 @@
-#FEATURES=--features
+FEATURES=--features density-mesh-core
 
 build:
 	cargo build $(FEATURES)
