@@ -626,18 +626,10 @@ fn triangle<W: Write>(w: &mut W, c: RGB8,
            c.r, c.g, c.b, x1, y1, x2, y2, x3, y3)
 }
 
-fn fill_triangle<W: Write>(w: &mut W, c: RGB8,
-                           (x1,y1): (f64,f64), (x2,y2): (f64,f64),
-                           (x3,y3): (f64,f64)) -> io::Result<()> {
-    write!(w, "  \\meshfilltriangle{{{},{},{}}}{{{:.12}}}{{{:.12}}}\
-               {{{:.12}}}{{{:.12}}}{{{:.12}}}{{{:.12}}}\n",
-           c.r, c.g, c.b, x1, y1, x2, y2, x3, y3)
-}
-
-fn fill_quadrilateral<W: Write>(
+fn quadrilateral<W: Write>(
     w: &mut W, c: RGB8, (x1,y1): (f64,f64), (x2,y2): (f64,f64),
     (x3,y3): (f64,f64), (x4,y4): (f64,f64)) -> io::Result<()> {
-    write!(w, "  \\meshfillquadrilateral{{{},{},{}}}{{{:.12}}}{{{:.12}}}\
+    write!(w, "  \\meshquadrilateral{{{},{},{}}}{{{:.12}}}{{{:.12}}}\
                {{{:.12}}}{{{:.12}}}{{{:.12}}}{{{:.12}}}{{{:.12}}}{{{:.12}}}\n",
            c.r, c.g, c.b, x1, y1, x2, y2, x3, y3, x4, y4)
 }
@@ -689,38 +681,38 @@ macro_rules! write_xxx_levels {
                         | (Equal, Equal, Greater) => {
                             // (Equal, Equal, Equal) not accepted
                             // because strict superlevel.
-                            fill_triangle($w, color, p1, p2, p3)?
+                            triangle($w, color, p1, p2, p3)?
                         }
                     (Greater, Greater, Less) => { // Cut edges 1-3, 3-2
-                        fill_quadrilateral($w, color, p2, p1,
-                                           intercept(p1,z1, p3,z3, l),
-                                           intercept(p3,z3, p2,z2, l))?
+                        quadrilateral($w, color, p2, p1,
+                                      intercept(p1,z1, p3,z3, l),
+                                      intercept(p3,z3, p2,z2, l))?
                     }
                     (Greater, Less, Greater) => { // Cut edges 3-2, 2-1
-                        fill_quadrilateral($w, color, p1, p3,
-                                           intercept(p3,z3, p2,z2, l),
-                                           intercept(p2,z2, p1,z1, l))?
+                        quadrilateral($w, color, p1, p3,
+                                      intercept(p3,z3, p2,z2, l),
+                                      intercept(p2,z2, p1,z1, l))?
                     }
                     (Less, Greater, Greater) => { // Cut edges 2-1, 1-3
-                        fill_quadrilateral($w, color, p3, p2,
-                                           intercept(p2,z2, p1,z1, l),
-                                           intercept(p1,z1, p3,z3, l))?
+                        quadrilateral($w, color, p3, p2,
+                                      intercept(p2,z2, p1,z1, l),
+                                      intercept(p1,z1, p3,z3, l))?
                     }
                     // (Greater, Equal, Equal) rightly matched before.
                     (Greater, Equal | Less, Equal | Less) => {
-                        fill_triangle($w, color, p1,
-                                      intercept(p1,z1, p2,z2, l),
-                                      intercept(p1,z1, p3,z3, l))?
+                        triangle($w, color, p1,
+                                 intercept(p1,z1, p2,z2, l),
+                                 intercept(p1,z1, p3,z3, l))?
                     }
                     (Equal | Less, Greater, Equal | Less) => {
-                        fill_triangle($w, color, p2,
-                                      intercept(p2,z2, p1,z1, l),
-                                      intercept(p2,z2, p3,z3, l))?
+                        triangle($w, color, p2,
+                                 intercept(p2,z2, p1,z1, l),
+                                 intercept(p2,z2, p3,z3, l))?
                     }
                     (Equal | Less, Equal | Less, Greater) => {
-                        fill_triangle($w, color, p3,
-                                      intercept(p3,z3, p1,z1, l),
-                                      intercept(p3,z3, p2,z2, l))?
+                        triangle($w, color, p3,
+                                 intercept(p3,z3, p1,z1, l),
+                                 intercept(p3,z3, p2,z2, l))?
                     }
                     // Nothing to color
                     (Equal | Less, Equal | Less, Equal | Less) => {}
@@ -736,12 +728,13 @@ macro_rules! write_xxx_levels {
 ///
 /// LaTex output is given in terms of three macros
 /// `\meshline{R,G,B}{x1}{y1}{x2}{y2}`,
-/// `\meshpoint{R,G,B}{point number}{x}{y}`, and
-/// `\meshtriangle{R,G,B}{x1}{y1}{x2}{y2}{x3}{y3}` to respectively
-/// plot edges, points and (filled) triangles.  You can easily
-/// customize them in your LaTeX file.  If you do not provide your own
-/// implementations, default ones will be used.  The LaTeX package
-/// `tikz` is required.
+/// `\meshpoint{R,G,B}{point number}{x}{y}`,
+/// `\meshtriangle{R,G,B}{x1}{y1}{x2}{y2}{x3}{y3}`, and
+/// `\meshquadrilateral{R,G,B}{x1}{y1}{x2}{y2}{x3}{y3}{x4}{y4}` to
+/// respectively plot edges, points, (filled) triangles, and (filled)
+/// quadrilaterals.  You can easily customize them in your LaTeX file.
+/// If you do not provide your own implementations, default ones will
+/// be used.  The LaTeX package `tikz` is required.
 ///
 /// # Example
 /// ```
@@ -1030,18 +1023,8 @@ const LATEX_BEGIN: &str =
       \pgfpathlineto{\pgfpointxy{#6}{#7}}
       \pgfusepath{fill}
     \end{pgfscope}}
-  % \meshfilltriangle{R,G,B}{x1}{y1}{x2}{y2}{x3}{y3}
-  \providecommand{\meshfilltriangle}[7]{
-    \begin{pgfscope}
-      \definecolor{RustMesh}{RGB}{#1}
-      \pgfsetcolor{RustMesh}
-      \pgfpathmoveto{\pgfpointxy{#2}{#3}}
-      \pgfpathlineto{\pgfpointxy{#4}{#5}}
-      \pgfpathlineto{\pgfpointxy{#6}{#7}}
-      \pgfusepath{fill}
-    \end{pgfscope}}
-  % \meshfillquadrilateral{R,G,B}{x1}{y1}{x2}{y2}{x3}{y3}{x4}{y4}
-  \providecommand{\meshfillquadrilateral}[9]{
+  % \meshquadrilateral{R,G,B}{x1}{y1}{x2}{y2}{x3}{y3}{x4}{y4}
+  \providecommand{\meshquadrilateral}[9]{
     \begin{pgfscope}
       \definecolor{RustMesh}{RGB}{#1}
       \pgfsetcolor{RustMesh}
