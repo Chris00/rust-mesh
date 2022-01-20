@@ -416,7 +416,7 @@ macro_rules! cuthill_mckee_base {
     }}
 }
 
-/// Meshes that accepting permutations of points and triangles indices.
+/// Meshes accepting permutations of points indices.
 pub trait Permutable: Mesh {
     /// Transform the mesh `self` so that the points indices are
     /// transformed through the permutation `p`: if `point_after` is
