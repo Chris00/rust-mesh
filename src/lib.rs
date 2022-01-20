@@ -326,9 +326,19 @@ impl<B: MeshBase> Mesh for Mesh2D<B> {
     fn edge_marker(&self, i: usize) -> i32 { self.edge_marker[i] as i32 }
 }
 
-
-impl<B: MeshBase> Mesh2D<B> {
-    pub fn new(b: B) -> Self {
+impl<Base: MeshBase> From<Base> for Mesh2D<Base> {
+    /// Promote `b` to a value implementing the full [`Mesh`] trait.
+    ///
+    /// # Example
+    /// ```
+    /// use mesh2d::{Mesh, Mesh2D};
+    /// # fn test<B: mesh2d::MeshBase>(b: B) {
+    /// // Suppose `b` holds a value implementing `MeshBase`.
+    /// let mesh = Mesh2D::from(b);
+    /// mesh.latex().save("mymesh.tex");
+    /// # }
+    /// ```
+    fn from(b: Base) -> Self {
         let mut e = HashMap::new();
         for t in 0 .. b.n_triangles() {
             // p1 ≤ p2 ≤ p3 required by the specification.
