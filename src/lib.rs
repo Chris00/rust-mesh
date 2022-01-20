@@ -662,15 +662,15 @@ macro_rules! reverse_order { ($o: expr) => { $o.reverse() } }
 /// Designed for super-levels, reverse the ordering for sub-levels.
 macro_rules! write_xxx_levels {
     ($w: ident, $m: ident, $z: ident, $levels: expr, $rev: ident) => {
-        for t in 0 .. $m.n_triangles() {
-            let (i1, i2, i3) = $m.triangle(t);
-            let p1 = $m.point(i1);
-            let z1 = $z.index(i1);
-            let p2 = $m.point(i2);
-            let z2 = $z.index(i2);
-            let p3 = $m.point(i3);
-            let z3 = $z.index(i3);
-            for &(l, color) in &$levels {
+        for &(l, color) in &$levels {
+            for t in 0 .. $m.n_triangles() {
+                let (i1, i2, i3) = $m.triangle(t);
+                let p1 = $m.point(i1);
+                let z1 = $z.index(i1);
+                let p2 = $m.point(i2);
+                let z2 = $z.index(i2);
+                let p3 = $m.point(i3);
+                let z3 = $z.index(i3);
                 use std::cmp::Ordering::*;
                 // Only finite values have been kept.
                 match ($rev!(z1.partial_cmp(&l).unwrap()),
