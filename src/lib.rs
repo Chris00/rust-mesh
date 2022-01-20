@@ -159,7 +159,7 @@ macro_rules! default_level_color {
 
 ////////////////////////////////////////////////////////////////////////
 //
-// PSLG & meshes
+// Meshes
 
 /// A bounding box in ℝ².  It is required that `xmin` ≤ `xmax` and
 /// `ymin` ≤ `ymax` unless the box is empty in which case `xmin` =
@@ -171,14 +171,29 @@ pub struct BoundingBox {
     pub ymax: f64,
 }
 
-/// Trait implemented by Planar Straight Line Graphs.
-pub trait Pslg {
+/// Trait describing various characteristics of a mesh.
+pub trait Mesh {
     /// Return the number of points in the PSLG.
     fn n_points(&self) -> usize;
     /// Return the coordinates (x,y) of the point of index `i` (where
     /// it is assumed that 0 ≤ `i` < `n_points()`).  The coordinates
     /// must be finite numbers.
     fn point(&self, i: usize) -> (f64, f64);
+    /// Number of triangles in the mesh.
+    fn n_triangles(&self) -> usize;
+    /// The 3 corners (p₁, p₂, p₃) of the triangle `i`:
+    /// 0 ≤ pₖ < `n_points()` are the indices of the corresponding
+    /// points.  We **require** that p₁ ≤ p₂ ≤ p₃.
+    fn triangle(&self, i: usize) -> (usize, usize, usize);
+
+    /// Return the number of edges in the mesh.
+    fn n_edges(&self) -> usize;
+    /// Return (p₁, p₂) the point indices of the enpoints of edge `i`.
+    /// We **require** that p₁ ≤ p₂.
+    fn edge(&self, i: usize) -> (usize, usize);
+    /// Return the marker of the edge `i` where 0 ≤ `i` < `n_edges()`.
+    /// By convention, edges inside the domain receive the marker `0`.
+    fn edge_marker(&self, i: usize) -> i32;
 
     /// Return the bounding box enclosing the PSLG.  If the PSLG is
     /// empty, `xmin` = `ymin` = +∞ and `xmax` = `ymax` = -∞.
@@ -196,25 +211,6 @@ pub trait Pslg {
         }
         BoundingBox{ xmin, xmax, ymin, ymax }
     }
-}
-
-/// Trait describing various characteristics of a mesh.
-pub trait Mesh: Pslg {
-    /// Number of triangles in the mesh.
-    fn n_triangles(&self) -> usize;
-    /// The 3 corners (p₁, p₂, p₃) of the triangle `i`:
-    /// 0 ≤ pₖ < `n_points()` are the indices of the corresponding
-    /// points.  We **require** that p₁ ≤ p₂ ≤ p₃.
-    fn triangle(&self, i: usize) -> (usize, usize, usize);
-
-    /// Return the number of edges in the mesh.
-    fn n_edges(&self) -> usize;
-    /// Return (p₁, p₂) the point indices of the enpoints of edge `i`.
-    /// We **require** that p₁ ≤ p₂.
-    fn edge(&self, i: usize) -> (usize, usize);
-    /// Return the marker of the edge `i` where 0 ≤ `i` < `n_edges()`.
-    /// By convention, edges inside the domain receive the marker `0`.
-    fn edge_marker(&self, i: usize) -> i32;
 
     /// Returns the number of nonzero super-diagonals + 1 (for the
     /// diagonal) of symmetric band matrices for P1 finite elements
@@ -276,7 +272,7 @@ pub trait Mesh: Pslg {
     }
 
     /// Graph the vector `z` defined on the mesh `self` using Scilab.
-    /// The value of the function at the point [`point(i)`][Pslg::point]
+    /// The value of the function at the point [`point(i)`][Mesh::point]
     /// is given by `z[i]`.
     ///
     /// # Example
@@ -1071,11 +1067,9 @@ mod tests {
             n_points: usize,
             edge: Vec<(usize, usize)>,
         }
-        impl Pslg for M {
+        impl Mesh for M {
             fn n_points(&self) -> usize { self.n_points }
             fn point(&self, _: usize) -> (f64, f64) { todo!() }
-        }
-        impl Mesh for M {
             fn n_triangles(&self) -> usize { todo!() }
             fn triangle(&self, _: usize) -> (usize, usize, usize) { todo!() }
             fn n_edges(&self) -> usize { self.edge.len() }
