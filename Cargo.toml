@@ -1,9 +1,9 @@
 [package]
-name = "mesh"
+name = "mesh2d"
 version = "0.1.0"
 edition = "2021"
 authors = ["Christophe Troestler <christophe.troestler@umons.ac.be>"]
-description = "Triangular mesh generation and manipulation"
+description = "Two dimensional triangular mesh generation and manipulation"
 homepage = "https://github.com/Chris00/rust-mesh"
 repository = "https://github.com/Chris00/rust-mesh"
 documentation = "https://docs.rs/mesh"

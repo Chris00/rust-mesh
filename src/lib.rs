@@ -47,7 +47,7 @@ impl Permutation {
     ///
     /// # Example
     /// ```
-    /// use mesh::Permutation;
+    /// use mesh2d::Permutation;
     /// let p = Permutation::new([1, 0, 2]);
     /// ```
     pub fn new(c: impl IntoIterator<Item=usize>) -> Option<Self> {
@@ -79,7 +79,7 @@ impl Permutation {
     ///
     /// # Example
     /// ```
-    /// use mesh::Permutation;
+    /// use mesh2d::Permutation;
     /// let p = Permutation::new([2, 0, 3, 1]).unwrap();
     /// let mut x = ["a", "b", "c", "d"];
     /// p.apply(&mut x);
@@ -87,7 +87,8 @@ impl Permutation {
     /// ```
     pub fn apply<T>(&self, x: &mut [T]) {
         if self.len() != x.len() {
-            panic!("mesh::Permutation::apply: the permutation and slice must have the same length.")
+            panic!("mesh2d::Permutation::apply: the permutation and slice \
+                    must have the same length.")
         }
         let mut replaced = vec![false; self.len()];
         let mut start = 0_usize;
@@ -133,7 +134,7 @@ impl AsRef<Vec<usize>> for Permutation {
     ///
     /// # Example
     /// ```
-    /// use mesh::Permutation;
+    /// use mesh2d::Permutation;
     /// let p = Permutation::new([1, 0, 2]).unwrap();
     /// assert_eq!(&p.as_ref()[..], [1, 0, 2]);
     /// ```
@@ -259,7 +260,7 @@ pub trait Mesh: Pslg {
     ///
     /// # Example
     /// ```
-    /// use mesh::Mesh;
+    /// use mesh2d::Mesh;
     /// use rgb::{RGB, RGB8};
     /// const RED: RGB8 = RGB {r: 255, g: 0, b: 0};
     /// # fn test<M: Mesh>(mesh: M) -> std::io::Result<()> {
@@ -280,7 +281,7 @@ pub trait Mesh: Pslg {
     ///
     /// # Example
     /// ```
-    /// use mesh::Mesh;
+    /// use mesh2d::Mesh;
     /// # fn test<M: Mesh>(mesh: M) -> std::io::Result<()> {
     /// // Assume `mesh` is a value of a type implementing `Mesh`
     /// // and that, for this example, `mesh.n_points()` is 4.
@@ -290,7 +291,7 @@ pub trait Mesh: Pslg {
     fn scilab<'a, Z>(&'a self, z: Z) -> Scilab<'a, Self>
     where Z: P1 + 'a {
         if z.len() != self.n_points() {
-            panic!("mesh::Mesh::scilab: z.len() = {} but expected {}",
+            panic!("mesh2d::MeshBase::scilab: z.len() = {} but expected {}",
                    z.len(), self.n_points());
         }
         let edge_color = Box::new(default_mesh_color!(self));
@@ -464,7 +465,7 @@ enum Action<'a> {
     SubLevels(Box<dyn P1 + 'a>) // levels in decreasing order
 }
 
-/// LaTeX output.  Created by [`Mesh::latex`].
+/// LaTeX output.  Created by [`mesh2d::latex`].
 pub struct LaTeX<'a, M>
 where M: Mesh + ?Sized {
     mesh: &'a M,
@@ -498,7 +499,7 @@ macro_rules! meth_levels {
         where Z: P1 + 'a,
               L: IntoIterator<Item=(f64, RGB8)> {
             if z.len() != self.mesh.n_points() {
-                panic!("mesh::LaTeX::{}: z.len() == {}, expected {}",
+                panic!("mesh2d::LaTeX::{}: z.len() == {}, expected {}",
                        stringify!($meth), z.len(), self.mesh.n_points()) }
             let levels = $sort!(sanitize_levels(levels));
             LaTeX { action: Action::$act(Box::new(z)), levels, .. self }
@@ -657,7 +658,7 @@ macro_rules! write_xxx_levels {
 ///
 /// # Example
 /// ```
-/// use mesh::Mesh;
+/// use mesh2d::Mesh;
 /// use rgb::{RGB, RGB8};
 /// const RED: RGB8 = RGB {r: 255, g: 0, b: 0};
 /// # fn test<M: Mesh>(mesh: M) -> std::io::Result<()> {
@@ -680,7 +681,7 @@ where M: Mesh {
     /// To draw only the boundary of the mesh (the default when drawing
     /// level cuves or sets), use the following.
     /// ```
-    /// use mesh::Mesh;
+    /// use mesh2d::Mesh;
     /// use rgb::{RGB, RGB8};
     /// const BLACK: RGB8 = RGB {r: 0, g: 0, b: 0};
     /// # fn test<M: Mesh>(mesh: M) -> std::io::Result<()> {
@@ -920,7 +921,7 @@ where M: Mesh {
 // capacity exceeded".
 const LATEX_BEGIN: &str =
     r#"\begin{pgfscope}
-  % Written by Rust "mesh" crate.
+  % Written by the Rust "mesh2d" crate.
   % \meshline{R,G,B}{x1}{y1}{x2}{y2}
   \providecommand{\meshline}[5]{%
     \begin{pgfscope}

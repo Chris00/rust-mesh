@@ -1,8 +1,8 @@
-Triangular Mesh utilities for Rust
-==================================
+Rust 2D Triangular Mesh utilities
+=================================
 
 These mesh generation and manipulations utilities come in several
-crates for triangular.  More precisely:
+crates.  More precisely:
 
 - `mesh`: A set of traits for meshes providing several functions to
   manipulate them.  In particular, it allows to export meshes and
