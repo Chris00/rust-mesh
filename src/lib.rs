@@ -2,11 +2,11 @@
 //! provide some functions to help to display and design geometries.
 
 use std::{collections::{VecDeque, HashSet},
-          io::{self, Write},
           fmt::{self, Display, Formatter},
-          fs,
+          fs::File,
+          io::{self, Write},
           ops::Index,
-          path::Path};
+          path::{Path, PathBuf}};
 use rgb::{RGB, RGB8};
 
 ////////////////////////////////////////////////////////////////////////
@@ -290,12 +290,11 @@ pub trait Mesh {
             panic!("mesh2d::MeshBase::scilab: z.len() = {} but expected {}",
                    z.len(), self.n_points());
         }
-        let edge_color = Box::new(default_mesh_color!(self));
         Scilab { mesh: self, z: Box::new(z),
                  longitude: 70.,  azimuth: 60.,
                  mode: Mode::Triangles,
                  draw_box: DrawBox::Full,
-                 edge_color }
+                 edge_color: None }
     }
 
 }
@@ -907,7 +906,7 @@ where M: Mesh {
 
     /// Same as [`write`] except that it writes to the given file.
     pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<(), io::Error> {
-        let mut f = fs::File::create(path)?;
+        let mut f = File::create(path)?;
         self.write(&mut f)?;
         f.flush()
     }
@@ -997,7 +996,7 @@ where M: Mesh + ?Sized {
     azimuth: f64,
     mode: Mode,
     draw_box: DrawBox,
-    edge_color: Box<dyn Fn(usize) -> Option<RGB8> + 'a>,
+    edge_color: Option<RGB8>,
 }
 
 impl<'a, M> Scilab<'a, M>
@@ -1021,25 +1020,83 @@ where M: Mesh {
     }
 
     /// Use the function `edge_color` to color the edges.
-    /// See [`Mesh::edge`] for details.
-    pub fn edge<E>(self, edge_color: E) -> Self
-    where E: Fn(usize) -> Option<RGB8> + 'a {
-        Scilab { edge_color: Box::new(edge_color), .. self }
+    /// See [`LaTeX::edge`] for details.
+    pub fn edge(self, edge_color: RGB8) -> Self {
+        Scilab { edge_color: Some(edge_color), .. self }
     }
 
-    fn write<W>(&self, w: &mut W) -> Result<(), io::Error>
-    where W: Write {
-        write!(w, "")
-    }
-
-    /// Saves the mesh data and the function values `z` (see
-    /// [`Mesh::scilab()`]) (i.e. ([fortran layout])) on that mesh so
-    /// that when Scilab runs the created [file].sci script, the graph
-    /// of the function is drawn.
+    /// Saves the mesh data and the function values `z` on the mesh
+    /// (see [`Mesh::scilab`]) so that when Scilab runs the created
+    /// `path`.sci script, the graph of the function is drawn.  Note
+    /// that this method also creates `path`.x.dat, `path`.y.dat, and
+    /// `path`.z.dat to hold Scilab matrices.
     pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<(), io::Error> {
-        let mut f = fs::File::create(path)?;
-        self.write(&mut f)?;
-        f.flush()
+        let path = path.as_ref();
+        let sci = path.with_extension("sci");
+        let xf = path.with_extension ("x.dat");
+        let yf = path.with_extension("y.dat");
+        let zf = path.with_extension("z.dat");
+        let mode = match self.mode {
+            Mode::Triangles => 1,
+            Mode::TrianglesOnly => 0,
+            Mode::NoTriangles => -1 };
+        let draw_box = match self.draw_box {
+            DrawBox::None => 0,
+            DrawBox::Behind => 2,
+            DrawBox::BoxOnly => 3,
+            DrawBox::Full => 4 };
+        let mut f = File::create(&sci)?;
+        let filename = |f: &'a PathBuf| -> &'a str {
+            f.file_name().map(std::ffi::OsStr::to_str).flatten()
+                .expect("mesh2d::Scilab::save: non UTF-8 file name") };
+        write!(f, "mode(0);\n\
+                   // Run in Scilab with: exec('{}')\n\
+                   // Written by the Rust Mesh module.\n\
+                   rust = struct('f', scf(), 'e', null, \
+                   'x', fscanfMat('{}'), 'y', fscanfMat('{}'), \
+                   'z', fscanfMat('{}'));\n\
+                   clf();\n\
+                   rust.e = gce();\n\
+                   rust.e.hiddencolor = -1;\n\
+                   rust.f.color_map = jetcolormap(100);\n",
+               sci.display(), filename(&xf), filename(&yf), filename(&zf))?;
+        match self.edge_color {
+            Some(c) if mode >= 0 => {
+                write!(f, "rust.f.color_map(1,:) = [{}, {}, {}];\n\
+                           xset('color', 1);\n",
+                       c.r as f64 / 255.,  c.g as f64 / 255.,
+                       c.b as f64 / 255.)?;
+            }
+            _ => ()
+        }
+        write!(f, "plot3d1(rust.x, rust.y, rust.z, theta={}, alpha={}, \
+                   flag=[{},2,{}]);\n\
+                   disp('Save: xs2pdf(rust.f, ''{}.pdf'')');\n",
+               self.longitude, self.azimuth, mode, draw_box,
+               filename(&sci))?;
+        f.flush()?;
+        macro_rules! save_mat {
+            ($fn: ident, $m: expr, $coord: expr) => {
+                let mut f = File::create($fn)?;
+                for t in 0 .. $m.n_triangles() {
+                    write!(f, "{:16e} ", $coord($m.triangle(t).0))?;
+                }
+                write!(f, "\n")?;
+                for t in 0 .. $m.n_triangles() {
+                    write!(f, "{:16e} ", $coord($m.triangle(t).1))?;
+                }
+                write!(f, "\n")?;
+                for t in 0 .. $m.n_triangles() {
+                    write!(f, "{:16e} ", $coord($m.triangle(t).2))?;
+                }
+                write!(f, "\n")?;
+                f.flush()?;
+            }
+        }
+        save_mat!(xf, self.mesh, |i| self.mesh.point(i).0);
+        save_mat!(yf, self.mesh, |i| self.mesh.point(i).1);
+        save_mat!(zf, self.mesh, |i| self.z.index(i));
+        Ok(())
     }
 }
 
