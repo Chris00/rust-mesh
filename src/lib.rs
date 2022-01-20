@@ -796,7 +796,7 @@ where M: Mesh {
         write!(w, "  % {} points\n", m.n_points())?;
         for i in 0 .. m.n_points() { point(w, BLACK, i, m.point(i))? }
         // Write lines (on top of points)
-        write!(w, "% {} triangles\n", m.n_triangles())?;
+        write!(w, "  % {} triangles\n", m.n_triangles())?;
         for i in 0 .. m.n_edges() {
             match edge_color(i) {
                 Some(c) => {
@@ -1000,7 +1000,7 @@ const LATEX_BEGIN: &str =
     r#"\begin{pgfscope}
   % Written by the Rust "mesh2d" crate.
   % \meshline{R,G,B}{x1}{y1}{x2}{y2}
-  \providecommand{\meshline}[5]{%
+  \providecommand{\meshline}[5]{
     \begin{pgfscope}
       \definecolor{RustMesh}{RGB}{#1}
       \pgfsetcolor{RustMesh}
@@ -1011,7 +1011,7 @@ const LATEX_BEGIN: &str =
   % \meshpoint{R,G,B}{point number}{x}{y}
   \providecommand{\meshpoint}[4]{}
   % \meshtriangle{R,G,B}{x1}{y1}{x2}{y2}{x3}{y3}
-  \providecommand{\meshtriangle}[7]{%
+  \providecommand{\meshtriangle}[7]{
     \begin{pgfscope}
       \definecolor{RustMesh}{RGB}{#1}
       \pgfsetcolor{RustMesh}
@@ -1021,7 +1021,7 @@ const LATEX_BEGIN: &str =
       \pgfusepath{fill}
     \end{pgfscope}}
   % \meshfilltriangle{R,G,B}{x1}{y1}{x2}{y2}{x3}{y3}
-  \providecommand{\meshfilltriangle}[7]{%
+  \providecommand{\meshfilltriangle}[7]{
     \begin{pgfscope}
       \definecolor{RustMesh}{RGB}{#1}
       \pgfsetcolor{RustMesh}
@@ -1031,7 +1031,7 @@ const LATEX_BEGIN: &str =
       \pgfusepath{fill}
     \end{pgfscope}}
   % \meshfillquadrilateral{R,G,B}{x1}{y1}{x2}{y2}{x3}{y3}{x4}{y4}
-  \providecommand{\meshfillquadrilateral}[9]{%
+  \providecommand{\meshfillquadrilateral}[9]{
     \begin{pgfscope}
       \definecolor{RustMesh}{RGB}{#1}
       \pgfsetcolor{RustMesh}
