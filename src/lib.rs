@@ -354,12 +354,12 @@ impl<Base: MeshBase> From<Base> for Mesh2D<Base> {
         for t in 0 .. b.n_triangles() {
             // p1 ≤ p2 ≤ p3 required by the specification.
             let (p1, p2, p3) = b.triangle(t);
-            let cnt = e.entry((p1, p2)).or_insert(-1);
-            *cnt += 1;
-            let cnt = e.entry((p1, p3)).or_insert(-1);
-            *cnt += 1;
-            let cnt = e.entry((p2, p3)).or_insert(-1);
-            *cnt += 1;
+            let cnt = e.entry((p1, p2)).or_insert(2);
+            *cnt -= 1;
+            let cnt = e.entry((p1, p3)).or_insert(2);
+            *cnt -= 1;
+            let cnt = e.entry((p2, p3)).or_insert(2);
+            *cnt -= 1;
         }
         let n = e.len();
         let mut edge = Vec::with_capacity(n);
