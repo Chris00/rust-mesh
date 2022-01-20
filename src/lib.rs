@@ -1014,7 +1014,7 @@ const LATEX_BEGIN: &str =
       \pgfsetcolor{RustMesh}
       \pgfpathmoveto{\pgfpointxy{#2}{#3}}
       \pgfpathlineto{\pgfpointxy{#4}{#5}}
-      \pgfusepath{stroke}
+      \pgfusepathqstroke
     \end{pgfscope}}
   % \meshpoint{R,G,B}{point number}{x}{y}
   \providecommand{\meshpoint}[4]{}
@@ -1026,7 +1026,7 @@ const LATEX_BEGIN: &str =
       \pgfpathmoveto{\pgfpointxy{#2}{#3}}
       \pgfpathlineto{\pgfpointxy{#4}{#5}}
       \pgfpathlineto{\pgfpointxy{#6}{#7}}
-      \pgfusepath{fill}
+      \pgfusepathqfillstroke
     \end{pgfscope}}
   % \meshquadrilateral{R,G,B}{x1}{y1}{x2}{y2}{x3}{y3}{x4}{y4}
   \providecommand{\meshquadrilateral}[9]{
@@ -1037,7 +1037,7 @@ const LATEX_BEGIN: &str =
       \pgfpathlineto{\pgfpointxy{#4}{#5}}
       \pgfpathlineto{\pgfpointxy{#6}{#7}}
       \pgfpathlineto{\pgfpointxy{#8}{#9}}
-      \pgfusepath{fill}
+      \pgfusepathqfillstroke
     \end{pgfscope}}
 "#;
 
