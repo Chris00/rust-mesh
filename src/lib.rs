@@ -1,7 +1,7 @@
 //! Generic mesh structure to be used with various meshers.  Also
 //! provide some functions to help to display and design geometries.
 
-use std::{collections::{VecDeque, HashSet},
+use std::{collections::{VecDeque, HashSet, HashMap},
           fmt::{self, Display, Formatter},
           fs::File,
           io::{self, Write},
@@ -171,8 +171,8 @@ pub struct BoundingBox {
     pub ymax: f64,
 }
 
-/// Trait describing various characteristics of a mesh.
-pub trait Mesh {
+/// Trait describing the base methods a mesh must have.
+pub trait MeshBase {
     /// Return the number of points in the PSLG.
     fn n_points(&self) -> usize;
     /// Return the coordinates (x,y) of the point of index `i` (where
@@ -185,15 +185,6 @@ pub trait Mesh {
     /// 0 ≤ pₖ < `n_points()` are the indices of the corresponding
     /// points.  We **require** that p₁ ≤ p₂ ≤ p₃.
     fn triangle(&self, i: usize) -> (usize, usize, usize);
-
-    /// Return the number of edges in the mesh.
-    fn n_edges(&self) -> usize;
-    /// Return (p₁, p₂) the point indices of the enpoints of edge `i`.
-    /// We **require** that p₁ ≤ p₂.
-    fn edge(&self, i: usize) -> (usize, usize);
-    /// Return the marker of the edge `i` where 0 ≤ `i` < `n_edges()`.
-    /// By convention, edges inside the domain receive the marker `0`.
-    fn edge_marker(&self, i: usize) -> i32;
 
     /// Return the bounding box enclosing the PSLG.  If the PSLG is
     /// empty, `xmin` = `ymin` = +∞ and `xmax` = `ymax` = -∞.
@@ -227,7 +218,7 @@ pub trait Mesh {
         kd + 1
     }
 
-    /// Same as [`band_height_p1`][Mesh::band_height_p1] except that
+    /// Same as [`band_height_p1`][MeshBase::band_height_p1] except that
     /// it only consider the nodes `i` such that `predicate(i)` is `true`.
     fn band_height_p1_filter<P>(&self, mut predicate: P) -> usize
     where P: FnMut(usize) -> bool {
@@ -251,28 +242,8 @@ pub trait Mesh {
         kd + 1
     }
 
-    /// LaTeX output of the mesh `self` and of vectors defined on this
-    /// mesh.
-    ///
-    /// # Example
-    /// ```
-    /// use mesh2d::Mesh;
-    /// use rgb::{RGB, RGB8};
-    /// const RED: RGB8 = RGB {r: 255, g: 0, b: 0};
-    /// # fn test<M: Mesh>(mesh: M) -> std::io::Result<()> {
-    /// // Assume `mesh` is a value of a type implementing `Mesh`
-    /// // and that, for this example, `mesh.n_points()` is 4.
-    /// let levels = [(1.5, RED)];
-    /// mesh.latex().sub_levels([1., 2., 3., 4.], levels).save("/tmp/foo")?;
-    /// # Ok(()) }
-    /// ```
-    fn latex<'a>(&'a self) -> LaTeX<'a, Self> {
-        LaTeX { mesh: &self,  edge_color: None,
-                action: Action::Mesh, levels: vec![] }
-    }
-
     /// Graph the vector `z` defined on the mesh `self` using Scilab.
-    /// The value of the function at the point [`point(i)`][Mesh::point]
+    /// The value of the function at the point [`point(i)`][MeshBase::point]
     /// is given by `z[i]`.
     ///
     /// # Example
@@ -299,6 +270,92 @@ pub trait Mesh {
 
 }
 
+/// Trait describing various characteristics of a mesh.
+pub trait Mesh: MeshBase {
+    /// Return the number of edges in the mesh.
+    fn n_edges(&self) -> usize;
+    /// Return (p₁, p₂) the point indices of the enpoints of edge `i`.
+    /// We **require** that p₁ ≤ p₂.
+    fn edge(&self, i: usize) -> (usize, usize);
+    /// Return the marker of the edge `i` where 0 ≤ `i` < `n_edges()`.
+    /// By convention, edges inside the domain receive the marker `0`.
+    fn edge_marker(&self, i: usize) -> i32;
+
+    /// LaTeX output of the mesh `self` and of vectors defined on this
+    /// mesh.
+    ///
+    /// # Example
+    /// ```
+    /// use mesh2d::Mesh;
+    /// use rgb::{RGB, RGB8};
+    /// const RED: RGB8 = RGB {r: 255, g: 0, b: 0};
+    /// # fn test<M: Mesh>(mesh: M) -> std::io::Result<()> {
+    /// // Assume `mesh` is a value of a type implementing `Mesh`
+    /// // and that, for this example, `mesh.n_points()` is 4.
+    /// let levels = [(1.5, RED)];
+    /// mesh.latex().sub_levels([1., 2., 3., 4.], levels).save("/tmp/foo")?;
+    /// # Ok(()) }
+    /// ```
+    fn latex<'a>(&'a self) -> LaTeX<'a, Self> {
+        LaTeX { mesh: &self,  edge_color: None,
+                action: Action::Mesh, levels: vec![] }
+    }
+
+
+}
+
+/// Structure to promote a [`MeshBase`] to a [`Mesh`].
+pub struct Mesh2D<B> where B: MeshBase {
+    mesh: B,
+    edge: Vec<(usize, usize)>,
+    edge_marker: Vec<i8>,
+}
+
+impl<B: MeshBase> MeshBase for Mesh2D<B> {
+    fn n_points(&self) -> usize { self.mesh.n_points() }
+    fn point(&self, i: usize) -> (f64, f64) { self.mesh.point(i) }
+    fn n_triangles(&self) -> usize { self.mesh.n_triangles() }
+    fn triangle(&self, i: usize) -> (usize, usize, usize) {
+        self.mesh.triangle(i)
+    }
+}
+
+impl<B: MeshBase> Mesh for Mesh2D<B> {
+    fn n_edges(&self) -> usize { self.edge.len() }
+    fn edge(&self, i: usize) -> (usize, usize) { self.edge[i] }
+    fn edge_marker(&self, i: usize) -> i32 { self.edge_marker[i] as i32 }
+}
+
+
+impl<B: MeshBase> Mesh2D<B> {
+    pub fn new(b: B) -> Self {
+        let mut e = HashMap::new();
+        for t in 0 .. b.n_triangles() {
+            // p1 ≤ p2 ≤ p3 required by the specification.
+            let (p1, p2, p3) = b.triangle(t);
+            let cnt = e.entry((p1, p2)).or_insert(-1);
+            *cnt += 1;
+            let cnt = e.entry((p1, p3)).or_insert(-1);
+            *cnt += 1;
+            let cnt = e.entry((p2, p3)).or_insert(-1);
+            *cnt += 1;
+        }
+        let n = e.len();
+        let mut edge = Vec::with_capacity(n);
+        let mut edge_marker = Vec::with_capacity(n);
+        for ((p1, p2), cnt) in e.drain() {
+            edge.push((p1, p2));
+            if cnt > 1 { panic!("mesh2d::Mesh2D::new: an edge cannot be part \
+                                 od more than 2 triangles.") }
+            edge_marker.push(cnt);
+        }
+        Mesh2D { mesh: b,  edge,  edge_marker }
+    }
+}
+
+////////////////////////////////////////////////////////////////////////
+//
+// Band reduction
 
 fn arg_min_deg(deg: &Vec<i32>) -> usize {
     let mut i = 0;
@@ -376,7 +433,7 @@ pub trait Permutable: Mesh {
 
     /// Transform the mesh `self` so that the labelling of the points
     /// has been changed to lower its band (as computed by
-    /// [`band_height_p1`][Mesh::band_height_p1]).  Return the
+    /// [`band_height_p1`][MeshBase::band_height_p1]).  Return the
     /// permutation `p` of the points as it is needed to transfer
     /// vectors defined on the initial labeling to the new one.  The
     /// relation `p[i] == j` means that `j` is the new label for the
@@ -460,7 +517,7 @@ enum Action<'a> {
     SubLevels(Box<dyn P1 + 'a>) // levels in decreasing order
 }
 
-/// LaTeX output.  Created by [`mesh2d::latex`].
+/// LaTeX output.  Created by [`Mesh::latex`].
 pub struct LaTeX<'a, M>
 where M: Mesh + ?Sized {
     mesh: &'a M,
@@ -987,9 +1044,9 @@ pub enum DrawBox {
     Full
 }
 
-/// Scilab Output.  Created by [`Mesh::scilab`].
+/// Scilab Output.  Created by [`MeshBase::scilab`].
 pub struct Scilab<'a, M>
-where M: Mesh + ?Sized {
+where M: MeshBase + ?Sized {
     mesh: &'a M,
     z: Box<dyn P1 + 'a>,
     longitude: f64,
@@ -1026,7 +1083,7 @@ where M: Mesh {
     }
 
     /// Saves the mesh data and the function values `z` on the mesh
-    /// (see [`Mesh::scilab`]) so that when Scilab runs the created
+    /// (see [`MeshBase::scilab`]) so that when Scilab runs the created
     /// `path`.sci script, the graph of the function is drawn.  Note
     /// that this method also creates `path`.x.dat, `path`.y.dat, and
     /// `path`.z.dat to hold Scilab matrices.
@@ -1124,11 +1181,13 @@ mod tests {
             n_points: usize,
             edge: Vec<(usize, usize)>,
         }
-        impl Mesh for M {
+        impl MeshBase for M {
             fn n_points(&self) -> usize { self.n_points }
             fn point(&self, _: usize) -> (f64, f64) { todo!() }
             fn n_triangles(&self) -> usize { todo!() }
             fn triangle(&self, _: usize) -> (usize, usize, usize) { todo!() }
+        }
+        impl Mesh for M {
             fn n_edges(&self) -> usize { self.edge.len() }
             fn edge(&self, i: usize) -> (usize, usize) { self.edge[i] }
             fn edge_marker(&self, _: usize) -> i32 { todo!() }
