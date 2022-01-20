@@ -44,16 +44,16 @@ fn main() -> Result<(), GenericError> {
     m.latex().save(Path::new(&img_file).with_extension("tex"))?;
 
     let u = eval(&m, |x,y| y - x);
-    m.latex().super_levels(&u, [(0., RED), (-200., BLUE)])
+    m.latex().super_levels(&u, [(0., YELLOW), (-200., BLUE)])
         .save(Path::new(&img_file).with_extension("1.tex"))?;
 
     alpha_triangles(&m, &img, Path::new(&img_file).with_extension("2.tex"))?;
     Ok(())
 }
 
-const RED: RGB8 = RGB {r: 255, g: 0, b: 0};
+const YELLOW: RGB8 = RGB {r: 248, g: 247, b: 235};
 const BLUE: RGB8 = RGB {r: 100, g: 100, b: 255};
-const GREEN: RGB8 = RGB {r: 0, g: 200, b: 0};
+const ORANGE: RGB8 = RGB {r: 220, g: 56, b: 12};
 
 fn eval(m: &impl Mesh, f: impl Fn(f64, f64) -> f64) -> Vec<f64> {
     let mut u = vec![0.; m.n_points()];
@@ -75,7 +75,7 @@ fn alpha_triangles<P: AsRef<Path>>(
         let (x, y) = ((x1+x2+x3)/3., (y1+y2+y3)/3.);
         let Rgba(p) = img.get_pixel(x as u32, y as u32);
         if p[3] > 100 {
-            let c = GREEN;
+            let c = ORANGE;
             write!(f, "\\meshtriangle{{{},{},{}}}{{{:.12}}}{{{:.12}}}\
                        {{{:.12}}}{{{:.12}}}{{{:.12}}}{{{:.12}}}\n",
                    c.r, c.g, c.b, x1, y1, x2, y2, x3, y3)?;
