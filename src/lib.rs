@@ -5,7 +5,7 @@ use std::{collections::{VecDeque, HashSet, HashMap},
           fmt::{self, Display, Formatter},
           fs::File,
           io::{self, Write},
-          ops::Index,
+          ops::{Index, Deref},
           path::{Path, PathBuf}};
 use rgb::{RGB, RGB8};
 
@@ -305,10 +305,18 @@ pub trait Mesh: MeshBase {
 }
 
 /// Structure to promote a [`MeshBase`] to a [`Mesh`].
+///
+/// It dereferences to `B` so you keep access to `B`'s functionality
+/// from the promoted value.
 pub struct Mesh2D<B> where B: MeshBase {
     mesh: B,
     edge: Vec<(usize, usize)>,
     edge_marker: Vec<i8>,
+}
+
+impl<B: MeshBase> Deref for Mesh2D<B> {
+    type Target = B;
+    fn deref(&self) -> &Self::Target { &self.mesh }
 }
 
 impl<B: MeshBase> MeshBase for Mesh2D<B> {
