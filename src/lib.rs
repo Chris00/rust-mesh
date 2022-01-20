@@ -719,7 +719,6 @@ macro_rules! write_xxx_levels {
                 }
             }
         }
-        write!($w, "{}", LATEX_END)?;
     }
 }
 
@@ -790,15 +789,14 @@ where M: Mesh {
     /// Write the mesh `self` to the writer `w`.
     // Pass any `edge_color` so one can use the same value to both
     // `write` and `save` (because `self.edge` consumes `self`).
-    fn write_mesh_begin<W, E>(&self, w: &mut W, edge_color: E) -> io::Result<()>
+    fn write_mesh<W, E>(&self, w: &mut W, edge_color: E) -> io::Result<()>
     where W: Write,
           E: Fn(usize) -> Option<RGB8> {
         let m = self.mesh;
-        write!(w, "{}", LATEX_BEGIN)?;
         // Write points
         write!(w, "  % {} points\n", m.n_points())?;
         for i in 0 .. m.n_points() { point(w, BLACK, i, m.point(i))? }
-        // Write lines (on top of points)
+        // Write lines
         write!(w, "  % {} triangles\n", m.n_triangles())?;
         for i in 0 .. m.n_edges() {
             match edge_color(i) {
@@ -816,8 +814,9 @@ where M: Mesh {
                          -> io::Result<()>
     where W: Write,
           E: Fn(usize) -> Option<RGB8> {
+        write!(w, "{}", LATEX_BEGIN)?;
         let m = self.mesh;
-        self.write_mesh_begin(w, edge_color)?;
+        self.write_mesh(w, edge_color)?;
         let bdry = boundary_edges(m);
         // Write level lines for each triangle.
         for t in 0 .. m.n_triangles() {
@@ -938,20 +937,24 @@ where M: Mesh {
                               -> io::Result<()>
     where W: Write,
           E: Fn(usize) -> Option<RGB8> {
+        write!(w, "{}", LATEX_BEGIN)?;
         let m = self.mesh;
-        self.write_mesh_begin(w, edge_color)?;
         write_xxx_levels!(w, m, z, self.levels, keep_order);
-        Ok(())
+        // Write the mesh (by default, only the boundary) on top of
+        // the filled region.
+        self.write_mesh(w, edge_color)?;
+        write!(w, "{}", LATEX_END)
     }
 
     fn write_sublevels<W,E>(&self, w: &mut W, edge_color: E, z: &dyn P1)
                             -> io::Result<()>
     where W: Write,
           E: Fn(usize) -> Option<RGB8> {
+        write!(w, "{}", LATEX_BEGIN)?;
         let m = self.mesh;
-        self.write_mesh_begin(w, edge_color)?;
         write_xxx_levels!(w, m, z, self.levels, reverse_order);
-        Ok(())
+        self.write_mesh(w, edge_color)?;
+        write!(w, "{}", LATEX_END)
     }
 
     /// Write the mesh or the levels/superlevels/sublevels to `w`.
@@ -960,11 +963,13 @@ where M: Mesh {
         match &self.action {
             Action::Mesh => match &self.edge_color {
                 None => {
-                    self.write_mesh_begin(w, default_mesh_color!(self.mesh))?;
+                    write!(w, "{}", LATEX_BEGIN)?;
+                    self.write_mesh(w, default_mesh_color!(self.mesh))?;
                     write!(w, "{}", LATEX_END)
                 }
                 Some(e) => {
-                    self.write_mesh_begin(w, e)?;
+                    write!(w, "{}", LATEX_BEGIN)?;
+                    self.write_mesh(w, e)?;
                     write!(w, "{}", LATEX_END)
                 }
             }
