@@ -17,3 +17,12 @@ exclude = ["/.github", "/triangle", "/easymesh"]
 rgb = "0.8"
 ndarray = { version = "0.15.4", optional = true }
 density-mesh-core = { version = "1.5.0", optional = true }
+
+[dev-dependencies]
+image = "*"
+density-mesh-core = "1.5.0"
+density-mesh-image = "1.5.0"
+
+[[example]]
+name = "from_image"
+required-features = ["density-mesh-core"]

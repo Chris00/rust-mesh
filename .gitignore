@@ -1,2 +1,7 @@
 /target
 Cargo.lock
+auto/
+*.aux
+*.log
+*.pdf
+examples/rust-logo.tex

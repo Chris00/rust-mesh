@@ -1,0 +1,36 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage{tikz}
+
+\begin{document}
+
+\begin{tikzpicture}[x=0.2mm, y=0.2mm]
+  \begin{scope}
+    \providecommand{\meshtriangle}[7]{
+      \begin{pgfscope}
+        \definecolor{RustMesh}{RGB}{#1}
+        \pgfsetcolor{RustMesh}
+        \pgfpathmoveto{\pgfpointxy{#2}{#3}}
+        \pgfpathlineto{\pgfpointxy{#4}{#5}}
+        \pgfpathlineto{\pgfpointxy{#6}{#7}}
+        \pgfusepath{fill}
+      \end{pgfscope}}
+    \begin{scope}[opacity=0.5]
+      \input{rust-logo.2.tex}
+    \end{scope}
+  \end{scope}
+
+  \input{rust-logo.tex}
+  \begin{scope}[opacity=0.6]
+    \input{rust-logo.1.tex}
+  \end{scope}
+  \draw[->] (0,0) -- (500, 0);
+  \draw[->] (0,0) -- (0, 500);
+\end{tikzpicture}
+
+\end{document}
+%%% Local Variables:
+%%% mode: latex
+%%% TeX-master: t
+%%% End:

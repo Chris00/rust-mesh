@@ -374,6 +374,10 @@ impl<Base: MeshBase> From<Base> for Mesh2D<Base> {
     }
 }
 
+impl<Base: MeshBase + Clone> From<&Base> for Mesh2D<Base> {
+    fn from(b: &Base) -> Self { Mesh2D::from(b.clone()) }
+}
+
 ////////////////////////////////////////////////////////////////////////
 //
 // Band reduction
@@ -789,7 +793,7 @@ where M: Mesh {
         let m = self.mesh;
         write!(w, "{}", LATEX_BEGIN)?;
         // Write points
-        write!(w, "  % {} points", m.n_points())?;
+        write!(w, "  % {} points\n", m.n_points())?;
         for i in 0 .. m.n_points() { point(w, BLACK, i, m.point(i))? }
         // Write lines (on top of points)
         write!(w, "% {} triangles\n", m.n_triangles())?;
@@ -1005,8 +1009,8 @@ const LATEX_BEGIN: &str =
       \pgfusepath{stroke}
     \end{pgfscope}}
   % \meshpoint{R,G,B}{point number}{x}{y}
-  \providecommand{\meshpoint}[4]{}\n";
-  % \meshtriangle{R,G,B}{x1}{y1}{x2}{y2}{x3}{y3}\n";
+  \providecommand{\meshpoint}[4]{}
+  % \meshtriangle{R,G,B}{x1}{y1}{x2}{y2}{x3}{y3}
   \providecommand{\meshtriangle}[7]{%
     \begin{pgfscope}
       \definecolor{RustMesh}{RGB}{#1}
@@ -1015,7 +1019,7 @@ const LATEX_BEGIN: &str =
       \pgfpathlineto{\pgfpointxy{#4}{#5}}
       \pgfpathlineto{\pgfpointxy{#6}{#7}}
       \pgfusepath{fill}
-    \end{pgfscope}}\n";
+    \end{pgfscope}}
   % \meshfilltriangle{R,G,B}{x1}{y1}{x2}{y2}{x3}{y3}
   \providecommand{\meshfilltriangle}[7]{%
     \begin{pgfscope}
@@ -1025,7 +1029,7 @@ const LATEX_BEGIN: &str =
       \pgfpathlineto{\pgfpointxy{#4}{#5}}
       \pgfpathlineto{\pgfpointxy{#6}{#7}}
       \pgfusepath{fill}
-    \end{pgfscope}}\n";
+    \end{pgfscope}}
   % \meshfillquadrilateral{R,G,B}{x1}{y1}{x2}{y2}{x3}{y3}{x4}{y4}
   \providecommand{\meshfillquadrilateral}[9]{%
     \begin{pgfscope}
