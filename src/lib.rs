@@ -525,7 +525,17 @@ impl<const N: usize> P1 for &[f64; N] {
     fn index(&self, i: usize) -> f64 { self[i] }
 }
 
-#[cfg(ndarray)]
+impl P1 for Vec<f64> {
+    fn len(&self) -> usize { <[f64]>::len(self) }
+    fn index(&self, i: usize) -> f64 { self[i] }
+}
+
+impl P1 for &Vec<f64> {
+    fn len(&self) -> usize { <[f64]>::len(*self) }
+    fn index(&self, i: usize) -> f64 { self[i] }
+}
+
+#[cfg(feature = "ndarray")]
 impl P1 for ndarray::Array1<f64> {
     fn len(&self) -> usize { todo!() }
     fn index(&self, i: usize) -> f64 { todo!() }
