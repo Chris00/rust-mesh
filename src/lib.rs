@@ -258,17 +258,29 @@ pub trait MeshBase {
     /// mesh.scilab([1., 2., 3., 4.]).save("/tmp/foo");
     /// # Ok(()) }
     /// ```
-    fn scilab<'a, Z>(&'a self, z: Z) -> Scilab<'a, Self>
+    fn scilab<'a, Z>(&'a self, z: &'a Z) -> Scilab<'a, Self>
     where Z: P1 + 'a {
         if z.len() != self.n_points() {
             panic!("mesh2d::MeshBase::scilab: z.len() = {} but expected {}",
                    z.len(), self.n_points());
         }
-        Scilab { mesh: self, z: Box::new(z),
+        Scilab { mesh: self, z,
                  longitude: 70.,  azimuth: 60.,
                  mode: Mode::Triangles,
                  draw_box: DrawBox::Full,
                  edge_color: None }
+    }
+
+    fn matlab<'a, Z>(&'a self, z: &'a Z) -> Matlab<'a, Self>
+    where Z: P1 + 'a {
+        if z.len() != self.n_points() {
+            panic!("mesh2d::MeshBase::matlab: z.len() = {} but expected {}",
+                   z.len(), self.n_points());
+        }
+        Matlab { mesh: self, z,
+                 edge_color: EdgeColor::Color(BLACK),
+                 line_style: LineStyle::Solid,
+                 face_alpha: 1. }
     }
 
 }
@@ -541,15 +553,21 @@ impl P1 for ndarray::Array1<f64> {
     fn index(&self, i: usize) -> f64 { todo!() }
 }
 
+#[cfg(feature = "ndarray")]
+impl P1 for &ndarray::Array1<f64> {
+    fn len(&self) -> usize { todo!() }
+    fn index(&self, i: usize) -> f64 { todo!() }
+}
+
 ////////////////////////////////////////////////////////////////////////
 //
 // LaTeX Output
 
 enum Action<'a> {
     Mesh,
-    Levels(Box<dyn P1 + 'a>),
-    SuperLevels(Box<dyn P1 + 'a>), // levels in increasing order
-    SubLevels(Box<dyn P1 + 'a>) // levels in decreasing order
+    Levels(&'a dyn P1),
+    SuperLevels(&'a dyn P1), // levels in increasing order
+    SubLevels(&'a dyn P1) // levels in decreasing order
 }
 
 /// LaTeX output.  Created by [`Mesh::latex`].
@@ -582,14 +600,14 @@ macro_rules! sort_levels_decr { ($l: expr) => {{
 macro_rules! meth_levels {
     ($(#[$meta:meta])* $meth: ident, $act: ident, $sort: ident) => {
         $(#[$meta])*
-        pub fn $meth<Z, L>(self, z: Z, levels: L) -> LaTeX<'a, M>
+        pub fn $meth<Z, L>(self, z: &'a Z, levels: L) -> LaTeX<'a, M>
         where Z: P1 + 'a,
               L: IntoIterator<Item=(f64, RGB8)> {
             if z.len() != self.mesh.n_points() {
                 panic!("mesh2d::LaTeX::{}: z.len() == {}, expected {}",
                        stringify!($meth), z.len(), self.mesh.n_points()) }
             let levels = $sort!(sanitize_levels(levels));
-            LaTeX { action: Action::$act(Box::new(z)), levels, .. self }
+            LaTeX { action: Action::$act(z), levels, .. self }
         }
     }
 }
@@ -1071,7 +1089,7 @@ pub enum DrawBox {
 pub struct Scilab<'a, M>
 where M: MeshBase + ?Sized {
     mesh: &'a M,
-    z: Box<dyn P1 + 'a>,
+    z: &'a dyn P1,
     longitude: f64,
     azimuth: f64,
     mode: Mode,
@@ -1131,7 +1149,7 @@ where M: Mesh {
                 .expect("mesh2d::Scilab::save: non UTF-8 file name") };
         write!(f, "mode(0);\n\
                    // Run in Scilab with: exec('{}')\n\
-                   // Written by the Rust Mesh module.\n\
+                   // Written by the Rust mesh2d crate.\n\
                    rust = struct('f', scf(), 'e', null, \
                    'x', fscanfMat('{}'), 'y', fscanfMat('{}'), \
                    'z', fscanfMat('{}'));\n\
@@ -1184,6 +1202,105 @@ where M: Mesh {
 //
 // Matlab Output
 
+/// Specification of the color of the edges for [`Matlab`] output.
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone)]
+pub enum EdgeColor {
+    None,
+    Flat,
+    Interp,
+    Color(RGB8),
+}
+
+impl Display for EdgeColor {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
+        match self {
+            Self::None => write!(f, "'none'"),
+            Self::Flat => write!(f, "'flat'"),
+            Self::Interp => write!(f, "'interp'"),
+            Self::Color(c) =>
+                write!(f, "[{} {} {}]", c.r as f64 / 255.,
+                       c.g as f64 / 255., c.b as f64 / 255.),
+        }
+    }
+}
+
+/// Specifies the Matlab line style.
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone)]
+pub enum LineStyle {
+    Solid,
+    Dashed,
+    Dotted,
+    DashDotted,
+    None,
+}
+
+impl Display for LineStyle {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
+        match self {
+            LineStyle::Solid => write!(f, "'-'"),
+            LineStyle::Dashed => write!(f, "'--'"),
+            LineStyle::Dotted => write!(f, "':'"),
+            LineStyle::DashDotted => write!(f, "'-.'"),
+            LineStyle::None => write!(f, "'none'"),
+        }
+    }
+}
+
+/// Matlab Output.  Created by [`MeshBase::matlab`].
+pub struct Matlab<'a, M>
+where M: MeshBase + ?Sized {
+    mesh: &'a M,
+    z: &'a dyn P1,
+    edge_color: EdgeColor,
+    line_style: LineStyle,
+    face_alpha: f64,
+}
+
+impl<'a, M> Matlab<'a, M>
+where M: MeshBase {
+    /// Saves the mesh data and the function values `z` on the mesh
+    /// (see [`MeshBase::matlab`]) so that when Matlab runs the
+    /// created `path`.m script, the graph of the function is drawn.
+    /// It is mandated by Matlab that the filename should contain only
+    /// alphanumeric characters. Other characters in the filename will
+    /// be replaced by underscore.
+    pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<(), io::Error> {
+        let path = path.as_ref();
+        let sanitize_char = |c| {
+            match c {'0' ..= '9' | 'a' ..= 'z' | 'A' ..= 'Z' => c,
+                     _ => '_' }};
+        let fname: String = path.with_extension("").file_name()
+            .expect("mesh2d::Matlab::save: a filename is required.")
+            .to_str().unwrap_or("rust_matlab")
+            .chars().map(sanitize_char).collect();
+        let mat = path.with_file_name(fname).with_extension("m");
+        let pdf = mat.clone().with_extension("pdf");
+        let mut f = File::create(&mat)?;
+        let m = self.mesh;
+        write!(f, "%% Run in Matlab with: run {}\n\
+                   %% Created by the Rust mesh2d crate.\n\
+                   %% print({:?}, \"-dpdf\")\n",
+               mat.display(), pdf.file_name().unwrap())?;
+        write!(f, "mesh_x = [")?;
+        for i in 0 .. m.n_points() {
+            write!(f, "{:.16e} ", m.point(i).0)?; }
+        write!(f, "];\nmesh_y = [")?;
+        for i in 0 .. m.n_points() {
+            write!(f, "{:.16e} ", m.point(i).1)?; }
+        write!(f, "];\nmesh_z = [")?;
+        for i in 0 .. m.n_points() {
+            write!(f, "{:.16e} ", self.z.index(i))?; }
+        write!(f, "];\nmesh_triangles = [")?;
+        for t in 0 .. m.n_triangles() {
+            let (p1, p2, p3) = m.triangle(t);
+            // Matlab uses indexing from 1.
+            write!(f, "{} {} {}; ", p1 + 1, p2 + 1, p3 + 1)?; }
+        write!(f, "];\ntrisurf(mesh_triangles, mesh_x, mesh_y, mesh_z, \
+                   'FaceAlpha', {}, 'EdgeColor', {}, 'LineStyle', {});\n",
+               self.face_alpha.clamp(0., 1.), self.edge_color,
+               self.line_style)
+    }
+}
 
 ////////////////////////////////////////////////////////////////////////
 //

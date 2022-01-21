@@ -10,7 +10,7 @@ use density_mesh_image::{
 use std::{env, fs::File, io, io::Write, path::Path};
 
 use rgb::{RGB, RGB8};
-use mesh2d::{Mesh2D, Mesh};
+use mesh2d::*;
 
 macro_rules! panic_on_err {
     ($e: expr, $loc: expr) => {
@@ -46,6 +46,8 @@ fn main() -> Result<(), GenericError> {
     let u = eval(&m, |x,y| y - x);
     m.latex().super_levels(&u, [(0., YELLOW), (-200., BLUE)])
         .save(Path::new(&img_file).with_extension("1.tex"))?;
+    m.scilab(&u).save(&img_file)?;
+    m.matlab(&u).save(&img_file)?;
 
     alpha_triangles(&m, &img, Path::new(&img_file).with_extension("2.tex"))?;
     Ok(())
