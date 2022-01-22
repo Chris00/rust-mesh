@@ -283,6 +283,15 @@ pub trait MeshBase {
                  face_alpha: 1. }
     }
 
+    fn matplotlib<'a, Z>(&'a self, z: &'a Z) -> Matplotlib<'a, Self>
+    where Z: P1 + 'a {
+        if z.len() != self.n_points() {
+            panic!("mesh2d::MeshBase::matplotlib: z.len() = {} but expected {}",
+                   z.len(), self.n_points());
+        }
+        Matplotlib { mesh: self, z }
+    }
+
     fn mathematica<'a, Z>(&'a self, z: &'a Z) -> Mathematica<'a, Self>
     where Z: P1 + 'a {
         if z.len() != self.n_points() {
@@ -1309,6 +1318,78 @@ where M: MeshBase {
                self.line_style)
     }
 }
+
+////////////////////////////////////////////////////////////////////////
+//
+// Matplotlib Output
+
+pub struct Matplotlib<'a, M>
+where M: MeshBase + ?Sized {
+    mesh: &'a M,
+    z: &'a dyn P1,
+}
+
+impl<'a, M> Matplotlib<'a, M>
+where M: MeshBase {
+    pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<(), io::Error> {
+        let py = path.as_ref().with_extension("py");
+        let mut f = File::create(&py)?;
+        let m = self.mesh;
+        write!(f, "#!/usr/bin/env python3\n\
+                   # -*- coding:utf-8 -*-\n\
+                   import matplotlib.pyplot\n\
+                   class Mesh:\n    \
+                     \"\"\"Created by the Rust mesh2d crate\"\"\"\n    \
+                     def __init__(self):\n        \
+                       self.x = [")?;
+        for i in 0 .. m.n_points() {
+            write!(f, "{:.16e}, ", m.point(i).0)?; }
+        write!(f, "]\n        self.y = [")?;
+        for i in 0 .. m.n_points() {
+            write!(f, "{:.16e}, ", m.point(i).1)?; }
+        write!(f, "]\n        self.z = [")?;
+        for i in 0 .. m.n_points() {
+            write!(f, "{:.16e}, ", self.z.index(i))?; }
+        // https://matplotlib.org/stable/api/tri_api.html
+        write!(f, "]\n        self.triangles = [")?;
+        for t in 0 .. m.n_triangles() {
+            let (p0, p1, p2) = m.triangle(t);
+            let (x0, y0) = m.point(p0);
+            let (x1, y1) = m.point(p1);
+            let (x2, y2) = m.point(p2);
+            let dx1 = x1 - x0;  let dy1 = y1 - y0;
+            let dx2 = x2 - x0;  let dy2 = y2 - y0;
+            let e1 = - dx2 * dx1 - dy2 * dy1;
+            let e2 = dx2 * dy1 - dy2 * dx1;
+            if e2.atan2(e1) >= 0. {
+                write!(f, "[{}, {}, {}], ", p0, p1, p2)?;
+            } else {
+                write!(f, "[{}, {}, {}], ", p0, p2, p1)?;
+            }
+        }
+        write!(f, "]\n\n    \
+                   def plot(self, linewidth=0.2, cmap='viridis'):\n        \
+                   ax = matplotlib.pyplot.figure()\
+                   .add_subplot(projection='3d')\n        \
+                   ax.plot_trisurf(self.x, self.y, self.z, \
+                   triangles=self.triangles, antialiased=True, cmap=cmap, \
+                   linewidth=linewidth)\n\
+                   \n    \
+                   def mesh(self):\n        \
+                   ax = matplotlib.pyplot.figure().add_subplot()\n        \
+                   ax.triplot(self.x, self. y, self.triangles, lw=1.0)\
+                   \n\n\
+                   if __name__ == \"__main__\":\n    \
+                   import sys\n    \
+                   if len(sys.argv) >= 2 \
+                   and sys.argv[1] == '--mesh':\n        \
+                   Mesh().mesh()\n    \
+                   else:\n        \
+                   Mesh().plot()\n    \
+                   matplotlib.pyplot.show()")
+    }
+}
+
 
 ////////////////////////////////////////////////////////////////////////
 //
