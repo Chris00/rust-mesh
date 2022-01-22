@@ -283,6 +283,14 @@ pub trait MeshBase {
                  face_alpha: 1. }
     }
 
+    fn mathematica<'a, Z>(&'a self, z: &'a Z) -> Mathematica<'a, Self>
+    where Z: P1 + 'a {
+        if z.len() != self.n_points() {
+            panic!("mesh2d::MeshBase::mathematica: z.len() = {} but \
+                    expected {}", z.len(), self.n_points());
+        }
+        Mathematica { mesh: self, z }
+    }
 }
 
 /// Trait describing various characteristics of a mesh.
@@ -1306,7 +1314,139 @@ where M: MeshBase {
 //
 // Mathematica Output
 
+/// Mathematica Output.  Created by [`MeshBase::mathematica`].
+pub struct Mathematica<'a, M>
+where M: MeshBase + ?Sized {
+    mesh: &'a M,
+    z: &'a dyn P1,
+}
 
+#[derive(PartialEq, PartialOrd)]
+struct NotNaN(f64);
+
+impl Eq for NotNaN {}
+
+// FIXME: ? Eventually use
+// https://doc.rust-lang.org/nightly/std/primitive.f64.html#method.total_cmp
+impl Ord for NotNaN {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.partial_cmp(other).unwrap()
+    }
+}
+
+/// Sort the vertices at node `n0` by increasing (counterclockwise)
+/// angle w.r.t. the base vertex `i0`.  `TriangularSurfacePlot` (not
+/// `PlanarGraphPlot` it seems) requires the vertices to be ordered.
+fn sort_counterclockwise<M: MeshBase>(m: &M, n0: usize, nbh: &mut Vec<usize>) {
+    let (x0, y0) = m.point(n0);
+    if nbh.len() > 1 {
+        let (x1, y1) = m.point(nbh[0]);
+        let dx1 = x1 - x0;
+        let dy1 = y1 - y0;
+        // Since `atan2` returns an angle in ]-π, π], the angle of
+        // `(dx1,dy1)` will be set to π and thus the order given by
+        // the angles is correct.  Also there is no need to norm the
+        // vectors `(dx1,dy1)` and `(dx,dy)` because that will only
+        // dilate `(e1,e2)` which does not change the value of `atan2`.
+        let angle = |n| {
+            let (x, y) = m.point(n);
+            let dx = x - x0;  let dy = y - y0;
+            let e1 = - dx * dx1 - dy * dy1;
+            let e2 = dx * dy1 - dy * dx1;
+            NotNaN(e2.atan2(e1))
+        };
+        nbh.sort_by_cached_key(|n| angle(*n));
+    }
+}
+
+// Return an array `adj` such that `adj[i]` is the list of the
+// adjacent nodes to `i`.
+fn adjacent_nodes<M: MeshBase>(m: &M) -> Vec<Vec<usize>> {
+    let mut adj = vec![Vec::new(); m.n_points()];
+    for t in 0 .. m.n_triangles() {
+        let (p1, p2, p3) = m.triangle(t);
+        adj[p1].push(p2);  adj[p1].push(p3);
+        adj[p2].push(p1);  adj[p2].push(p3);
+        adj[p3].push(p1);  adj[p3].push(p2);
+    }
+    for (n, adjn) in  adj.iter_mut().enumerate() {
+        adjn.sort_unstable();
+        adjn.dedup();
+        sort_counterclockwise(m, n, adjn);
+    }
+    adj
+}
+
+fn write_f64(f: &mut File, x: f64) -> Result<(), io::Error> {
+    let x = format!("{:.16e}", x);
+    match x.find('e') {
+        None => write!(f, "{}", x),
+        Some(e) => write!(f, "{}*^{}", &x[0..e], &x[e+1 ..])
+    }
+}
+
+impl<'a, M> Mathematica<'a, M>
+where M: MeshBase {
+    /// Saves the mesh data and the function values `z` on the mesh
+    /// (see [`MeshBase::mathematica`]) so that when Mathematica runs
+    /// the created `path`.m script, the graph of the function is drawn.
+    pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<(), io::Error> {
+        let path = path.as_ref();
+        let allowed_char = |c: &char| {
+            match c {'0' ..= '9' | 'a' ..= 'z' | 'A' ..= 'Z' => true,
+                     _ => false }};
+        let fname: String = path.with_extension("").file_name()
+            .expect("mesh2d::Matlab::save: a filename is required.")
+            .to_str().unwrap_or("RustMathematica")
+            .chars().filter(allowed_char).collect();
+        let pkg =
+            if fname.is_empty() { "RustMathematica".to_string() }
+            else { let mut p = fname.chars();
+                   p.next().unwrap().to_uppercase().chain(p).collect() };
+        let mat = path.with_file_name(fname).with_extension("m");
+        let mut f = File::create(&mat)?;
+        let m = self.mesh;
+        write!(f, "(* Created by the Rust mesh2d crate. *)\n")?;
+        if m.n_points() == 0 {
+            write!(f, "(* No points in the mesh! *)\n")?;
+            return Ok(())
+        }
+        write!(f, "{}`xyz = {{{{", pkg)?;
+        let (x0, y0) = m.point(0);
+        write_f64(&mut f, x0)?;               write!(f, ", ")?;
+        write_f64(&mut f, y0)?;               write!(f, ", ")?;
+        write_f64(&mut f, self.z.index(0))?;  write!(f, "}}")?;
+        for i in 1 .. m.n_points() {
+            write!(f, ", {{")?;
+            let (x, y) = m.point(i);
+            write_f64(&mut f, x)?;                write!(f, ", ")?;
+            write_f64(&mut f, y)?;                write!(f, ", ")?;
+            write_f64(&mut f, self.z.index(i))?;  write!(f, "}}")?;
+        }
+        write!(f, "}};\n\n{}`adj = {{", pkg)?;
+        let adj = adjacent_nodes(m);
+        macro_rules! output_adj {
+            ($f: ident, $i: expr) => {
+                // Mathematica indices start at 1.
+                if adj[$i].is_empty() { write!($f, "{{{}, {{}}}}", $i+1)? }
+                else {
+                    write!($f, "{{{}, {{{}", $i+1, adj[$i][0]+1)?;
+                    for n in adj[$i].iter().skip(1) {
+                        write!(f, ", {}", n+1)?;
+                    }
+                    write!(f, "}}}}")?;
+                }
+            }
+        }
+        output_adj!(f, 0);
+        for i in 1 .. adj.len() {
+            write!(f, ", ")?;  output_adj!(f, i);
+        }
+        write!(f, "}};\n\n\
+                   TriangularSurfacePlot[{0}`xyz, {0}`adj, Axes -> True]\n",
+               pkg)
+    }
+}
 
 
 #[cfg(test)]
