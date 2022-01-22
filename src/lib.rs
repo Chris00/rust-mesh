@@ -152,14 +152,6 @@ impl AsRef<Vec<usize>> for Permutation {
 const BLACK: RGB8 = RGB {r: 0, g: 0, b: 0};
 const GREY: RGB8 = RGB {r: 150, g: 150, b: 150};
 
-macro_rules! default_mesh_color {
-    ($m: expr) => { |i| { if $m.edge_marker(i) == 0 { Some(GREY) }
-                          else { Some(BLACK) } }}}
-
-macro_rules! default_level_color {
-    ($s: ident) => { |i| { if $s.mesh.edge_marker(i) != 0 { Some(BLACK) }
-                           else { None } }}}
-
 ////////////////////////////////////////////////////////////////////////
 //
 // Meshes
@@ -296,12 +288,15 @@ pub trait MeshBase {
 /// Trait describing various characteristics of a mesh.
 pub trait Mesh: MeshBase {
     /// Return the number of edges in the mesh.
+    #[deprecated]
     fn n_edges(&self) -> usize;
     /// Return (p₁, p₂) the point indices of the enpoints of edge `i`.
     /// We **require** that p₁ ≤ p₂.
+    #[deprecated]
     fn edge(&self, i: usize) -> (usize, usize);
     /// Return the marker of the edge `i` where 0 ≤ `i` < `n_edges()`.
     /// By convention, edges inside the domain receive the marker `0`.
+    #[deprecated]
     fn edge_marker(&self, i: usize) -> i32;
 
     /// LaTeX output of the mesh `self` and of vectors defined on this
@@ -320,7 +315,9 @@ pub trait Mesh: MeshBase {
     /// # Ok(()) }
     /// ```
     fn latex<'a>(&'a self) -> LaTeX<'a, Self> {
-        LaTeX { mesh: &self,  edge_color: None,
+        LaTeX { mesh: self,  edges: Edges::new(self),
+                color: None,
+                boundary_color: None,
                 action: Action::Mesh, levels: vec![] }
     }
 
@@ -438,13 +435,15 @@ macro_rules! cuthill_mckee_base {
         // Degree of adjacency of each node.  -1 = done with that node.
         let mut deg: Vec<i32> = vec![0; n];
         // List of adjacent nodes:
-        let mut nbh: Vec<Vec<usize>> = vec![Vec::new(); n];
-        for i in 0 .. $m.n_edges() {
-            let (p1, p2) = $m.edge(i);
-            nbh[p1].push(p2);
-            deg[p1] += 1;
-            nbh[p2].push(p1);
-            deg[p2] += 1;
+        let mut nbh = vec![HashSet::new(); n];
+        for t in 0 .. $m.n_triangles() {
+            let (p1, p2, p3) = $m.triangle(t);
+            if nbh[p1].insert(p2) { deg[p1] += 1 }
+            if nbh[p1].insert(p3) { deg[p1] += 1 }
+            if nbh[p2].insert(p1) { deg[p2] += 1 }
+            if nbh[p2].insert(p3) { deg[p2] += 1 }
+            if nbh[p3].insert(p1) { deg[p3] += 1 }
+            if nbh[p3].insert(p2) { deg[p3] += 1 }
         }
         let mut free = 0_usize; // first free position in `perm`
         let mut q = VecDeque::new();
@@ -578,13 +577,40 @@ enum Action<'a> {
     SubLevels(&'a dyn P1) // levels in decreasing order
 }
 
+/// Map edges to 0 if inside and 1 if on the boundary.
+struct Edges(HashMap<(usize, usize), i8>);
+
+impl Edges {
+    fn new<M: Mesh + ?Sized>(m: &M) -> Self {
+        let mut e = HashMap::new();
+        for t in 0 .. m.n_triangles() {
+            // p1 ≤ p2 ≤ p3 required by the specification.
+            let (p1, p2, p3) = m.triangle(t);
+            let cnt = e.entry((p1, p2)).or_insert(2);
+            *cnt -= 1;
+            let cnt = e.entry((p1, p3)).or_insert(2);
+            *cnt -= 1;
+            let cnt = e.entry((p2, p3)).or_insert(2);
+            *cnt -= 1;
+        }
+        Edges(e)
+    }
+
+    fn on_boundary(&self, i1: usize, i2: usize) -> bool {
+        match self.0.get(&if i1 <= i2 { (i1, i2) } else { (i2, i1) }) {
+            Some(&cnt) => cnt == 1,
+            None => false
+        }
+    }
+}
+
 /// LaTeX output.  Created by [`Mesh::latex`].
 pub struct LaTeX<'a, M>
 where M: Mesh + ?Sized {
     mesh: &'a M,
-    // The "dyn" option was chosen because it avoids having a type
-    // parameter for the closure passed on.  This type may confuse the user.
-    edge_color: Option<Box<dyn Fn(usize) -> Option<RGB8> + 'a>>,
+    edges: Edges,
+    color: Option<Option<RGB8>>, // if specified, and then None ⇔ not drawn
+    boundary_color: Option<Option<RGB8>>,
     action: Action<'a>,
     levels: Vec<(f64, RGB8)>,
 }
@@ -664,22 +690,6 @@ fn quadrilateral<W: Write>(
 // FIXME: need to make it customizable?
 fn level_eq(l1: f64, l2: f64) -> bool {
     (l1 - l2).abs() <= 1e-8 * (l1.abs() + l2.abs())
-}
-
-/// Hold the boundary edges (to draw level curves).
-type BdryEdges = HashSet<(usize, usize)>;
-
-fn boundary_edges(m: &impl Mesh) -> BdryEdges {
-    let mut bdry = HashSet::new();
-    for i in 0 .. m.n_edges() {
-        // (i1, i2) = m.edge(i) ⇒ i1 ≤ i2
-        if m.edge_marker(i) != 0 { bdry.insert(m.edge(i)); }
-    }
-    bdry
-}
-
-fn on_boundary(bdry: &BdryEdges, i1: usize, i2: usize) -> bool {
-    bdry.contains(&if i1 <= i2 { (i1, i2) } else { (i2, i1) })
 }
 
 macro_rules! keep_order { ($o: expr) => { $o } }
@@ -777,28 +787,28 @@ macro_rules! write_xxx_levels {
 /// [tikz]: https://sourceforge.net/projects/pgf/
 impl<'a, M> LaTeX<'a, M>
 where M: Mesh {
-    /// Use the function `edge_color` to color the edges.
-    /// The return value of `edge_color(i)` specifies the color of the
-    /// edge numbered `i`.  If `edge_color(i)` returns `None`, the
-    /// edge is not drawn.
+    /// Specify the color of edges inside the domain.
+    /// A value of `None` says that inside edges will not be drawn.
     ///
     /// # Example
-    /// To draw only the boundary of the mesh (the default when drawing
-    /// level cuves or sets), use the following.
     /// ```
     /// use mesh2d::Mesh;
     /// use rgb::{RGB, RGB8};
-    /// const BLACK: RGB8 = RGB {r: 0, g: 0, b: 0};
+    /// const GREY: RGB8 = RGB {r: 150, g: 150, b: 150};
     /// # fn test<M: Mesh>(mesh: M) -> std::io::Result<()> {
     /// // Assume `mesh` is a value of a type implementing `Mesh`
     /// // and that, for this example, `mesh.n_points()` is 4.
-    /// mesh.latex().edge(|i| if mesh.edge_marker(i) != 0 { Some(BLACK) }
-    ///                       else { None });
+    /// mesh.latex().color(GREY);
     /// # Ok(()) }
     /// ```
-    pub fn edge<E>(self, edge_color: E) -> Self
-    where E: Fn(usize) -> Option<RGB8> + 'a {
-        LaTeX { edge_color: Some(Box::new(edge_color)), .. self }
+    pub fn color(self, color: Option<RGB8>) -> Self {
+        LaTeX { color: Some(color), .. self }
+    }
+
+    /// Specify the color of edges on the boundary of the domain.
+    /// If `None`, the boundary will not be drawn.
+    pub fn boundary_color(self, color: Option<RGB8>) -> Self {
+        LaTeX { boundary_color: Some(color), .. self }
     }
 
     meth_levels!(/// Specify that one wants to draw the level curves of `z`.
@@ -813,37 +823,37 @@ where M: Mesh {
         sub_levels, SubLevels, sort_levels_decr);
 
     /// Write the mesh `self` to the writer `w`.
-    // Pass any `edge_color` so one can use the same value to both
-    // `write` and `save` (because `self.edge` consumes `self`).
-    fn write_mesh<W, E>(&self, w: &mut W, edge_color: E) -> io::Result<()>
-    where W: Write,
-          E: Fn(usize) -> Option<RGB8> {
+    fn write_mesh<W>(&self, w: &mut W,
+                     default_color: Option<RGB8>) -> io::Result<()>
+    where W: Write {
         let m = self.mesh;
         // Write points
         write!(w, "  % {} points\n", m.n_points())?;
         for i in 0 .. m.n_points() { point(w, BLACK, i, m.point(i))? }
         // Write lines
+        let color = self.color.unwrap_or(default_color);
+        let brdy_color = self.boundary_color.unwrap_or(Some(BLACK));
         write!(w, "  % {} triangles\n", m.n_triangles())?;
-        for i in 0 .. m.n_edges() {
-            match edge_color(i) {
-                Some(c) => {
-                    let (p1, p2) = m.edge(i);
+        for (&(p1, p2), &cnt) in self.edges.0.iter() {
+            if cnt == 0 /* inside */ {
+                if let Some(c) = color {
                     line(w, c, m.point(p1), m.point(p2))?;
                 }
-                None => ()
+            } else {
+                if let Some(c) = brdy_color {
+                    line(w, c, m.point(p1), m.point(p2))?;
+                }
             }
         }
         Ok(())
     }
 
-    fn write_levels<W,E>(&self, w: &mut W, edge_color: E, z: &dyn P1)
-                         -> io::Result<()>
-    where W: Write,
-          E: Fn(usize) -> Option<RGB8> {
+    fn write_levels<W>(&self, w: &mut W, z: &dyn P1) -> io::Result<()>
+    where W: Write {
         write!(w, "{}", LATEX_BEGIN)?;
         let m = self.mesh;
-        self.write_mesh(w, edge_color)?;
-        let bdry = boundary_edges(m);
+        self.write_mesh(w, None)?;
+        let e = Edges::new(m);
         // Write level lines for each triangle.
         for t in 0 .. m.n_triangles() {
             let (i1, i2, i3) = m.triangle(t);
@@ -861,23 +871,23 @@ where M: Mesh {
                         if level_eq(l, z3) {
                             // The entire triangle is at the same
                             // level.  Try to remove boundary edges.
-                            if on_boundary(&bdry, i1, i2) {
-                                if on_boundary(&bdry, i1, i3)
-                                    || on_boundary(&bdry, i2, i3) {
+                            if e.on_boundary(i1, i2) {
+                                if e.on_boundary(i1, i3)
+                                    || e.on_boundary(i2, i3) {
                                         triangle(w, color, p1, p2, p3)?
                                     }
                                 else {
                                     line(w, color, p3, mid(p1, p2))?
                                 }
                             } else { // i1-i2 not on boundary
-                                if on_boundary(&bdry, i1, i3) {
-                                    if on_boundary(&bdry, i2, i3) {
+                                if e.on_boundary(i1, i3) {
+                                    if e.on_boundary(i2, i3) {
                                         triangle(w, color, p1, p2, p3)?
                                     } else {
                                         line(w, color, p2, mid(p1, p3))?
                                     }
                                 } else { // i1-i3 not on boundary
-                                    if on_boundary(&bdry, i2, i3) {
+                                    if e.on_boundary(i2, i3) {
                                         line(w, color, p1, mid(p2, p3))?
                                     } else {
                                         triangle(w, color, p1, p2, p3)?
@@ -885,13 +895,13 @@ where M: Mesh {
                                 }
                             }
                         } else { // l = z1 = z2 ≠ z3
-                            if ! on_boundary(&bdry, i1, i2) {
+                            if ! e.on_boundary(i1, i2) {
                                 line(w, color, p1, p2)?
                             }
                         }
                     } else { // l = z1 ≠ z2
                         if level_eq(l, z3) { // l = z1 = z3 ≠ z2
-                            if ! on_boundary(&bdry, i1, i3) {
+                            if ! e.on_boundary(i1, i3) {
                                 line(w, color, p1, p3)?
                             } else {
                                 if (z2 < l && l < z3) || (z3 < l && l < z2) {
@@ -904,7 +914,7 @@ where M: Mesh {
                 } else if l < z1 {
                     if level_eq(l, z2) {
                         if level_eq(l, z3) { // l = z2 = z3 < z1
-                            if ! on_boundary(&bdry, i2, i3) {
+                            if ! e.on_boundary(i2, i3) {
                                 line(w, color, p2, p3)?
                             }
                         } else if l > z3 { // z3 < l = z2 < z1
@@ -932,7 +942,7 @@ where M: Mesh {
                     // Symmetric of `l < z1` with all inequalities reversed
                     if level_eq(l, z2) {
                         if level_eq(l, z3) {
-                            if ! on_boundary(&bdry, i2, i3) {
+                            if ! e.on_boundary(i2, i3) {
                                 line(w, color, p2, p3)?
                             }
                         } else if l < z3 { // z1 < l = z2 < z3
@@ -959,27 +969,23 @@ where M: Mesh {
         write!(w, "{}", LATEX_END)
     }
 
-    fn write_superlevels<W,E>(&self, w: &mut W, edge_color: E, z: &dyn P1)
-                              -> io::Result<()>
-    where W: Write,
-          E: Fn(usize) -> Option<RGB8> {
+    fn write_superlevels<W>(&self, w: &mut W, z: &dyn P1) -> io::Result<()>
+    where W: Write {
         write!(w, "{}", LATEX_BEGIN)?;
         let m = self.mesh;
         write_xxx_levels!(w, m, z, self.levels, keep_order);
         // Write the mesh (by default, only the boundary) on top of
         // the filled region.
-        self.write_mesh(w, edge_color)?;
+        self.write_mesh(w, None)?;
         write!(w, "{}", LATEX_END)
     }
 
-    fn write_sublevels<W,E>(&self, w: &mut W, edge_color: E, z: &dyn P1)
-                            -> io::Result<()>
-    where W: Write,
-          E: Fn(usize) -> Option<RGB8> {
+    fn write_sublevels<W>(&self, w: &mut W, z: &dyn P1) -> io::Result<()>
+    where W: Write {
         write!(w, "{}", LATEX_BEGIN)?;
         let m = self.mesh;
         write_xxx_levels!(w, m, z, self.levels, reverse_order);
-        self.write_mesh(w, edge_color)?;
+        self.write_mesh(w, None)?;
         write!(w, "{}", LATEX_END)
     }
 
@@ -987,35 +993,19 @@ where M: Mesh {
     pub fn write<W>(&self, w: &mut W) -> Result<(), io::Error>
     where W: Write {
         match &self.action {
-            Action::Mesh => match &self.edge_color {
-                None => {
-                    write!(w, "{}", LATEX_BEGIN)?;
-                    self.write_mesh(w, default_mesh_color!(self.mesh))?;
-                    write!(w, "{}", LATEX_END)
-                }
-                Some(e) => {
-                    write!(w, "{}", LATEX_BEGIN)?;
-                    self.write_mesh(w, e)?;
-                    write!(w, "{}", LATEX_END)
-                }
+            Action::Mesh => {
+                write!(w, "{}", LATEX_BEGIN)?;
+                self.write_mesh(w, Some(GREY))?;
+                write!(w, "{}", LATEX_END)
             }
-            Action::Levels(u) => match &self.edge_color {
-                None =>
-                    self.write_levels(w, default_level_color!(self), &**u),
-                Some(e) =>
-                    self.write_levels(w, e, &**u)
+            Action::Levels(u) => {
+                self.write_levels(w, &**u)
             }
-            Action::SuperLevels(u) => match &self.edge_color {
-                None =>
-                    self.write_superlevels(w, default_level_color!(self), &**u),
-                Some(e) =>
-                    self.write_superlevels(w, e, &**u)
+            Action::SuperLevels(u) => {
+                self.write_superlevels(w, &**u)
             }
-            Action::SubLevels(u) => match &self.edge_color {
-                None =>
-                    self.write_sublevels(w, default_level_color!(self), &**u),
-                Some(e) =>
-                    self.write_sublevels(w, e, &**u)
+            Action::SubLevels(u) => {
+                self.write_sublevels(w, &**u)
             }
         }
     }
