@@ -1,0 +1,16 @@
+[package]
+name = "triangle-sys"
+version = "0.1.0"
+edition = "2021"
+links = "triangle"
+authors = ["Christophe Troestler <christophe.troestler@umons.ac.be>"]
+description = "Low level bindings to the triangle mesh generator"
+homepage = "https://github.com/Chris00/rust-mesh"
+repository = "https://github.com/Chris00/rust-mesh"
+documentation = "https://docs.rs/triangle-sys"
+license = "GPL-2.1-or-later"
+keywords = ["math", "mesh", "triangulation", "PDE", "science"]
+categories = ["mathematics", "science", "api-bindings"]
+
+[build-dependencies]
+cc = "1.0"
