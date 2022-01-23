@@ -1,4 +1,4 @@
-FEATURES=--features density-mesh-core
+FEATURES=--features ndarray,density-mesh-core
 
 build:
 	cargo build $(FEATURES)

@@ -507,15 +507,29 @@ impl P1 for &Vec<f64> {
 }
 
 #[cfg(feature = "ndarray")]
-impl P1 for ndarray::Array1<f64> {
-    fn len(&self) -> usize { todo!() }
-    fn index(&self, i: usize) -> f64 { todo!() }
-}
+mod ndarray {
+    use super::P1;
+    use ndarray::Array1;
 
-#[cfg(feature = "ndarray")]
-impl P1 for &ndarray::Array1<f64> {
-    fn len(&self) -> usize { todo!() }
-    fn index(&self, i: usize) -> f64 { todo!() }
+    impl P1 for Array1<f64> {
+        fn len(&self) -> usize { Array1::len(self) }
+        fn index(&self, i: usize) -> f64 { self[i] }
+    }
+
+    impl P1 for &Array1<f64> {
+        fn len(&self) -> usize { Array1::len(self) }
+        fn index(&self, i: usize) -> f64 { self[i] }
+    }
+
+    impl P1 for Array1<f32> {
+        fn len(&self) -> usize { ndarray::Array1::len(self) }
+        fn index(&self, i: usize) -> f64 { self[i] as f64 }
+    }
+
+    impl P1 for &ndarray::Array1<f32> {
+        fn len(&self) -> usize { ndarray::Array1::len(self) }
+        fn index(&self, i: usize) -> f64 { self[i] as f64 }
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////
