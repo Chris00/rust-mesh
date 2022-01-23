@@ -168,11 +168,11 @@ pub struct BoundingBox {
 
 /// Trait describing minimal characteristics of a mesh.
 pub trait Mesh {
-    /// Return the number of points in the PSLG.
+    /// Return the number of points in the mesh.
     fn n_points(&self) -> usize;
     /// Return the coordinates (x,y) of the point of index `i` (where
     /// it is assumed that 0 ≤ `i` < `n_points()`).  The coordinates
-    /// must be finite numbers.
+    /// **must** be finite numbers.
     fn point(&self, i: usize) -> (f64, f64);
     /// Number of triangles in the mesh.
     fn n_triangles(&self) -> usize;
@@ -181,7 +181,7 @@ pub trait Mesh {
     /// points.  We **require** that p₁ ≤ p₂ ≤ p₃.
     fn triangle(&self, i: usize) -> (usize, usize, usize);
 
-    /// Return the bounding box enclosing the PSLG.  If the PSLG is
+    /// Return the bounding box enclosing the mesh.  If the mesh is
     /// empty, `xmin` = `ymin` = +∞ and `xmax` = `ymax` = -∞.
     fn bounding_box(&self) -> BoundingBox {
         let mut xmin = f64::INFINITY;
@@ -247,7 +247,7 @@ pub trait Mesh {
     /// # fn test<M: Mesh>(mesh: M) -> std::io::Result<()> {
     /// // Assume `mesh` is a value of a type implementing `Mesh`
     /// // and that, for this example, `mesh.n_points()` is 4.
-    /// mesh.scilab([1., 2., 3., 4.]).save("/tmp/foo");
+    /// mesh.scilab(&[1., 2., 3., 4.]).save("/tmp/foo");
     /// # Ok(()) }
     /// ```
     fn scilab<'a, Z>(&'a self, z: &'a Z) -> Scilab<'a, Self>
@@ -263,6 +263,19 @@ pub trait Mesh {
                  edge_color: None }
     }
 
+    /// Graph the vector `z` defined on the mesh `self` using Matlab.
+    /// The value of the function at the point [`point(i)`][Mesh::point]
+    /// is given by `z[i]`.
+    ///
+    /// # Example
+    /// ```
+    /// use mesh2d::Mesh;
+    /// # fn test<M: Mesh>(mesh: M) -> std::io::Result<()> {
+    /// // Assume `mesh` is a value of a type implementing `Mesh`
+    /// // and that, for this example, `mesh.n_points()` is 4.
+    /// mesh.matlab(&[1., 2., 3., 4.]).save("/tmp/foo");
+    /// # Ok(()) }
+    /// ```
     fn matlab<'a, Z>(&'a self, z: &'a Z) -> Matlab<'a, Self>
     where Z: P1 + 'a {
         if z.len() != self.n_points() {
@@ -275,6 +288,19 @@ pub trait Mesh {
                  face_alpha: 1. }
     }
 
+    /// Graph the vector `z` defined on the mesh `self` using Matplotlib.
+    /// The value of the function at the point [`point(i)`][Mesh::point]
+    /// is given by `z[i]`.
+    ///
+    /// # Example
+    /// ```
+    /// use mesh2d::Mesh;
+    /// # fn test<M: Mesh>(mesh: M) -> std::io::Result<()> {
+    /// // Assume `mesh` is a value of a type implementing `Mesh`
+    /// // and that, for this example, `mesh.n_points()` is 4.
+    /// mesh.matplotlib(&[1., 2., 3., 4.]).save("/tmp/foo");
+    /// # Ok(()) }
+    /// ```
     fn matplotlib<'a, Z>(&'a self, z: &'a Z) -> Matplotlib<'a, Self>
     where Z: P1 + 'a {
         if z.len() != self.n_points() {
@@ -296,7 +322,7 @@ pub trait Mesh {
     /// // Assume `mesh` is a value of a type implementing `Mesh`
     /// // and that, for this example, `mesh.n_points()` is 4.
     /// let levels = [(1.5, RED)];
-    /// mesh.latex().sub_levels([1., 2., 3., 4.], levels).save("/tmp/foo")?;
+    /// mesh.latex().sub_levels(&[1., 2., 3., 4.], levels).save("/tmp/foo")?;
     /// # Ok(()) }
     /// ```
     fn latex<'a>(&'a self) -> LaTeX<'a, Self> {
@@ -706,7 +732,7 @@ macro_rules! write_xxx_levels {
 /// // Assume `mesh` is a value of a type implementing `Mesh`
 /// // and that, for this example, `mesh.n_points()` is 4.
 /// let levels = [(1.5, RED)];
-/// mesh.latex().sub_levels([1., 2., 3., 4.], levels).save("/tmp/foo")?;
+/// mesh.latex().sub_levels(&[1., 2., 3., 4.], levels).save("/tmp/foo")?;
 /// # Ok(()) }
 /// ```
 ///
@@ -724,7 +750,7 @@ where M: Mesh {
     /// # fn test<M: Mesh>(mesh: M) -> std::io::Result<()> {
     /// // Assume `mesh` is a value of a type implementing `Mesh`
     /// // and that, for this example, `mesh.n_points()` is 4.
-    /// mesh.latex().color(GREY);
+    /// mesh.latex().color(Some(GREY));
     /// # Ok(()) }
     /// ```
     pub fn color(self, color: Option<RGB8>) -> Self {
@@ -1041,10 +1067,9 @@ where M: Mesh {
         Scilab { draw_box, .. self }
     }
 
-    /// Use the function `edge_color` to color the edges.
-    /// See [`LaTeX::edge`] for details.
-    pub fn edge(self, edge_color: RGB8) -> Self {
-        Scilab { edge_color: Some(edge_color), .. self }
+    /// Color the edges using `color`.
+    pub fn edge(self, color: RGB8) -> Self {
+        Scilab { edge_color: Some(color), .. self }
     }
 
     /// Saves the mesh data and the function values `z` on the mesh
@@ -1230,6 +1255,7 @@ where M: Mesh {
 //
 // Matplotlib Output
 
+/// Matplotlib Output.  Created by [`Mesh::matplotlib`].
 pub struct Matplotlib<'a, M>
 where M: Mesh + ?Sized {
     mesh: &'a M,
