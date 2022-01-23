@@ -1,0 +1,2 @@
+[workspace]
+members = ["mesh2d", "triangle-sys", "triangle"]
