@@ -48,6 +48,7 @@ fn main() -> Result<(), GenericError> {
     m.scilab(&u).save(&img_file)?;
     m.matlab(&u).save(&img_file)?;
     m.matplotlib(&u).save(&img_file)?;
+    m.mathematica(&u).save(&img_file)?;
 
     alpha_triangles(&m, &img, Path::new(&img_file).with_extension("2.tex"))?;
     Ok(())

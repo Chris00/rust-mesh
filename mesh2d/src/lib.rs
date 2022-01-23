@@ -330,6 +330,16 @@ pub trait Mesh {
                 boundary_color: None,
                 action: Action::Mesh, levels: vec![] }
     }
+
+
+    fn mathematica<'a, Z>(&'a self, z: &'a Z) -> Mathematica<'a, Self>
+    where Z: P1 + 'a {
+        if z.len() != self.n_points() {
+            panic!("mesh2d::Mesh::mathematica: z.len() = {} but \
+                    expected {}", z.len(), self.n_points());
+        }
+        Mathematica { mesh: self, z }
+    }
 }
 
 
@@ -1335,6 +1345,84 @@ where M: Mesh {
     }
 }
 
+
+////////////////////////////////////////////////////////////////////////
+//
+// Mathematica Output
+
+/// Mathematica Output.  Created by [`Mesh::mathematica`].
+pub struct Mathematica<'a, M>
+where M: Mesh + ?Sized {
+    mesh: &'a M,
+    z: &'a dyn P1,
+}
+
+fn write_f64(f: &mut File, x: f64) -> Result<(), io::Error> {
+    let x = format!("{:.16e}", x);
+    match x.find('e') {
+        None => write!(f, "{}", x.trim_end_matches('0')),
+        Some(e) => {
+            write!(f, "{}", &x[0..e].trim_end_matches('0'))?;
+            let exp = &x[e+1 ..];
+            if exp != "0" { write!(f, "*^{}", exp)?; }
+            Ok(())
+        }
+    }
+}
+
+fn write_3d_point(f: &mut File,
+                  (x, y): (f64, f64), z: f64) -> Result<(), io::Error> {
+    write!(f, "{{")?; write_f64(f, x)?;
+    write!(f, ",")?;  write_f64(f, y)?;
+    write!(f, ",")?;  write_f64(f, z)?;  write!(f, "}}")
+}
+
+impl<'a, M> Mathematica<'a, M>
+where M: Mesh {
+    /// Saves the mesh data and the function values `z` on the mesh
+    /// (see [`Mesh::mathematica`]) so that when Mathematica runs
+    /// the created `path`.m script, the graph of the function is drawn.
+    pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<(), io::Error> {
+        let path = path.as_ref();
+        let allowed_char = |c: &char| {
+            match c {'0' ..= '9' | 'a' ..= 'z' | 'A' ..= 'Z' => true,
+                     _ => false }};
+        let fname: String = path.with_extension("").file_name()
+            .expect("mesh2d::Mathematica::save: a filename is required.")
+            .to_str().unwrap_or("RustMathematica")
+            .chars().filter(allowed_char).collect();
+        let pkg =
+            if fname.is_empty() { "RustMathematica".to_string() }
+            else { let mut p = fname.chars();
+                   p.next().unwrap().to_uppercase().chain(p).collect() };
+        let mat = path.with_file_name(fname).with_extension("m");
+        let mut f = File::create(&mat)?;
+        let m = self.mesh;
+        write!(f, "(* Created by the Rust mesh2d crate. *)\n")?;
+        if m.n_points() == 0 {
+            write!(f, "\"No points in the mesh!\"\n")?;
+            return Ok(())
+        }
+        write!(f, "{}`xyz = {{", pkg)?;
+        write_3d_point(&mut f, m.point(0), self.z.index(0))?;
+        for i in 1 .. m.n_points() {
+            write!(f, ", ")?;
+            write_3d_point(&mut f, m.point(i), self.z.index(i))?;
+        }
+        write!(f, "}};\n\
+                   {}`triangles = {{", pkg)?;
+        // Mathematica indices start at 1.
+        let (i1, i2, i3) = m.triangle(0);
+        write!(f, "{{{},{},{}}}", i1+1, i2+1, i3+1)?;
+        for t in 1 .. m.n_triangles() {
+            let (i1, i2, i3) = m.triangle(t);
+            write!(f, ", {{{},{},{}}}", i1+1, i2+1, i3+1)?;
+        }
+        write!(f, "}};\n\
+                   Graphics3D[GraphicsComplex[{0}`xyz, \
+                   Polygon[{0}`triangles]]]\n", pkg)
+    }
+}
 
 
 
