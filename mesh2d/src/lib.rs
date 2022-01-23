@@ -178,7 +178,7 @@ pub trait Mesh {
     fn n_triangles(&self) -> usize;
     /// The 3 corners (p₁, p₂, p₃) of the triangle `i`:
     /// 0 ≤ pₖ < `n_points()` are the indices of the corresponding
-    /// points.  We **require** that p₁ ≤ p₂ ≤ p₃.
+    /// points.
     fn triangle(&self, i: usize) -> (usize, usize, usize);
 
     /// Return the bounding box enclosing the mesh.  If the mesh is
@@ -206,8 +206,7 @@ pub trait Mesh {
     fn band_height_p1(&self) -> usize {
         let mut kd = 0_usize;
         for i in 0 .. self.n_triangles() {
-            let (i1, i2, i3) = self.triangle(i);
-            // No absolute values as it is required that i3 ≥ i2 ≥ i1
+            let (i1, i2, i3) = sort3(self.triangle(i));
             kd = kd.max(i3 - i2).max(i3 - i1).max(i2 - i1);
         }
         kd + 1
@@ -219,7 +218,7 @@ pub trait Mesh {
     where P: FnMut(usize) -> bool {
         let mut kd = 0_usize;
         for i in 0 .. self.n_triangles() {
-            let (i1, i2, i3) = self.triangle(i);
+            let (i1, i2, i3) = sort3(self.triangle(i));
             if predicate(i1) {
                 if predicate(i2) {
                     if predicate(i3) {
@@ -336,8 +335,7 @@ pub trait Mesh {
 
 /// Return the triple made of `p1`, `p2`, and `p3` sorted in
 /// increasing order.  Helper function.
-#[allow(dead_code)]
-fn sort3(p1: usize, p2: usize, p3: usize) -> (usize, usize, usize) {
+fn sort3((p1, p2, p3): (usize, usize, usize)) -> (usize, usize, usize) {
     if p1 <= p2 {
         if p2 <= p3 { (p1, p2, p3) }
         else if p1 <= p3 { (p1, p3, p2) } else { (p3, p1, p2) }
@@ -544,14 +542,14 @@ enum Action<'a> {
 }
 
 /// Map edges to 0 if inside and 1 if on the boundary.
+/// If (p₁, p₂) is a key, we require p₁ ≤ p₂.
 struct Edges(HashMap<(usize, usize), i8>);
 
 impl Edges {
     fn new<M: Mesh + ?Sized>(m: &M) -> Self {
         let mut e = HashMap::new();
         for t in 0 .. m.n_triangles() {
-            // p1 ≤ p2 ≤ p3 required by the specification.
-            let (p1, p2, p3) = m.triangle(t);
+            let (p1, p2, p3) = sort3(m.triangle(t));
             let cnt = e.entry((p1, p2)).or_insert(2);
             *cnt -= 1;
             let cnt = e.entry((p1, p3)).or_insert(2);
@@ -1363,7 +1361,7 @@ mod tests {
         impl Permutable for M {
             fn permute_points(&mut self, p: &Permutation) {
                 for t in &mut self.triangles {
-                    *t = sort3(p[t.0], p[t.1], p[t.2])
+                    *t = sort3((p[t.0], p[t.1], p[t.2]))
                 }
             }
         }

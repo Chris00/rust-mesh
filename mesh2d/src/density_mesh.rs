@@ -17,7 +17,7 @@ macro_rules! impl_mesh {
 
             fn triangle(&self, i: usize) -> (usize, usize, usize) {
                 let t = self.triangles[i];
-                super::sort3(t.a, t.b, t.c)
+                (t.a, t.b, t.c)
             }
         }
     }
