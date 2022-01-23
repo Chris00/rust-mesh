@@ -1,13 +1,13 @@
 FEATURES=--features ndarray,density-mesh-core
 
 build:
-	cargo build $(FEATURES)
+	cargo $@ $(FEATURES)
 
 test:
-	cargo test $(FEATURES)
+	cargo $@ $(FEATURES)
 
 doc:
-	cargo doc $(FEATURES)
+	cargo $@ $(FEATURES)
 
 IMG = rust-logo.png
 example:
@@ -16,6 +16,6 @@ example:
 	cd /tmp/ && pdflatex from_image.tex
 
 clean:
-	cargo clean
+	cargo $@
 
 .PHONY: build test doc clean
