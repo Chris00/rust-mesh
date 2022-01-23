@@ -5,7 +5,7 @@ use std::{collections::{VecDeque, HashSet, HashMap},
           fmt::{self, Display, Formatter},
           fs::File,
           io::{self, Write},
-          ops::{Index, Deref},
+          ops::Index,
           path::{Path, PathBuf}};
 use rgb::{RGB, RGB8};
 
@@ -166,8 +166,8 @@ pub struct BoundingBox {
     pub ymax: f64,
 }
 
-/// Trait describing the base methods a mesh must have.
-pub trait MeshBase {
+/// Trait describing minimal characteristics of a mesh.
+pub trait Mesh {
     /// Return the number of points in the PSLG.
     fn n_points(&self) -> usize;
     /// Return the coordinates (x,y) of the point of index `i` (where
@@ -213,7 +213,7 @@ pub trait MeshBase {
         kd + 1
     }
 
-    /// Same as [`band_height_p1`][MeshBase::band_height_p1] except that
+    /// Same as [`band_height_p1`][Mesh::band_height_p1] except that
     /// it only consider the nodes `i` such that `predicate(i)` is `true`.
     fn band_height_p1_filter<P>(&self, mut predicate: P) -> usize
     where P: FnMut(usize) -> bool {
@@ -238,7 +238,7 @@ pub trait MeshBase {
     }
 
     /// Graph the vector `z` defined on the mesh `self` using Scilab.
-    /// The value of the function at the point [`point(i)`][MeshBase::point]
+    /// The value of the function at the point [`point(i)`][Mesh::point]
     /// is given by `z[i]`.
     ///
     /// # Example
@@ -253,7 +253,7 @@ pub trait MeshBase {
     fn scilab<'a, Z>(&'a self, z: &'a Z) -> Scilab<'a, Self>
     where Z: P1 + 'a {
         if z.len() != self.n_points() {
-            panic!("mesh2d::MeshBase::scilab: z.len() = {} but expected {}",
+            panic!("mesh2d::Mesh::scilab: z.len() = {} but expected {}",
                    z.len(), self.n_points());
         }
         Scilab { mesh: self, z,
@@ -266,7 +266,7 @@ pub trait MeshBase {
     fn matlab<'a, Z>(&'a self, z: &'a Z) -> Matlab<'a, Self>
     where Z: P1 + 'a {
         if z.len() != self.n_points() {
-            panic!("mesh2d::MeshBase::matlab: z.len() = {} but expected {}",
+            panic!("mesh2d::Mesh::matlab: z.len() = {} but expected {}",
                    z.len(), self.n_points());
         }
         Matlab { mesh: self, z,
@@ -278,26 +278,11 @@ pub trait MeshBase {
     fn matplotlib<'a, Z>(&'a self, z: &'a Z) -> Matplotlib<'a, Self>
     where Z: P1 + 'a {
         if z.len() != self.n_points() {
-            panic!("mesh2d::MeshBase::matplotlib: z.len() = {} but expected {}",
+            panic!("mesh2d::Mesh::matplotlib: z.len() = {} but expected {}",
                    z.len(), self.n_points());
         }
         Matplotlib { mesh: self, z }
     }
-}
-
-/// Trait describing various characteristics of a mesh.
-pub trait Mesh: MeshBase {
-    /// Return the number of edges in the mesh.
-    #[deprecated]
-    fn n_edges(&self) -> usize;
-    /// Return (p₁, p₂) the point indices of the enpoints of edge `i`.
-    /// We **require** that p₁ ≤ p₂.
-    #[deprecated]
-    fn edge(&self, i: usize) -> (usize, usize);
-    /// Return the marker of the edge `i` where 0 ≤ `i` < `n_edges()`.
-    /// By convention, edges inside the domain receive the marker `0`.
-    #[deprecated]
-    fn edge_marker(&self, i: usize) -> i32;
 
     /// LaTeX output of the mesh `self` and of vectors defined on this
     /// mesh.
@@ -320,79 +305,20 @@ pub trait Mesh: MeshBase {
                 boundary_color: None,
                 action: Action::Mesh, levels: vec![] }
     }
-
-
 }
 
-/// Structure to promote a [`MeshBase`] to a [`Mesh`].
-///
-/// It dereferences to `B` so you keep access to `B`'s functionality
-/// from the promoted value.
-pub struct Mesh2D<B> where B: MeshBase {
-    mesh: B,
-    edge: Vec<(usize, usize)>,
-    edge_marker: Vec<i8>,
-}
 
-impl<B: MeshBase> Deref for Mesh2D<B> {
-    type Target = B;
-    fn deref(&self) -> &Self::Target { &self.mesh }
-}
-
-impl<B: MeshBase> MeshBase for Mesh2D<B> {
-    fn n_points(&self) -> usize { self.mesh.n_points() }
-    fn point(&self, i: usize) -> (f64, f64) { self.mesh.point(i) }
-    fn n_triangles(&self) -> usize { self.mesh.n_triangles() }
-    fn triangle(&self, i: usize) -> (usize, usize, usize) {
-        self.mesh.triangle(i)
+/// Return the triple made of `p1`, `p2`, and `p3` sorted in
+/// increasing order.  Helper function.
+#[allow(dead_code)]
+fn sort3(p1: usize, p2: usize, p3: usize) -> (usize, usize, usize) {
+    if p1 <= p2 {
+        if p2 <= p3 { (p1, p2, p3) }
+        else if p1 <= p3 { (p1, p3, p2) } else { (p3, p1, p2) }
+    } else { // p2 < p1
+        if p1 <= p3 { (p2, p1, p3) }
+        else if p2 <= p3 { (p2, p3, p1) } else { (p3, p2, p1) }
     }
-}
-
-impl<B: MeshBase> Mesh for Mesh2D<B> {
-    fn n_edges(&self) -> usize { self.edge.len() }
-    fn edge(&self, i: usize) -> (usize, usize) { self.edge[i] }
-    fn edge_marker(&self, i: usize) -> i32 { self.edge_marker[i] as i32 }
-}
-
-impl<Base: MeshBase> From<Base> for Mesh2D<Base> {
-    /// Promote `b` to a value implementing the full [`Mesh`] trait.
-    ///
-    /// # Example
-    /// ```
-    /// use mesh2d::{Mesh, Mesh2D};
-    /// # fn test<B: mesh2d::MeshBase>(b: B) {
-    /// // Suppose `b` holds a value implementing `MeshBase`.
-    /// let mesh = Mesh2D::from(b);
-    /// mesh.latex().save("mymesh.tex");
-    /// # }
-    /// ```
-    fn from(b: Base) -> Self {
-        let mut e = HashMap::new();
-        for t in 0 .. b.n_triangles() {
-            // p1 ≤ p2 ≤ p3 required by the specification.
-            let (p1, p2, p3) = b.triangle(t);
-            let cnt = e.entry((p1, p2)).or_insert(2);
-            *cnt -= 1;
-            let cnt = e.entry((p1, p3)).or_insert(2);
-            *cnt -= 1;
-            let cnt = e.entry((p2, p3)).or_insert(2);
-            *cnt -= 1;
-        }
-        let n = e.len();
-        let mut edge = Vec::with_capacity(n);
-        let mut edge_marker = Vec::with_capacity(n);
-        for ((p1, p2), cnt) in e.drain() {
-            edge.push((p1, p2));
-            if cnt > 1 { panic!("mesh2d::Mesh2D::new: an edge cannot be part \
-                                 od more than 2 triangles.") }
-            edge_marker.push(cnt);
-        }
-        Mesh2D { mesh: b,  edge,  edge_marker }
-    }
-}
-
-impl<Base: MeshBase + Clone> From<&Base> for Mesh2D<Base> {
-    fn from(b: &Base) -> Self { Mesh2D::from(b.clone()) }
 }
 
 ////////////////////////////////////////////////////////////////////////
@@ -477,7 +403,7 @@ pub trait Permutable: Mesh {
 
     /// Transform the mesh `self` so that the labelling of the points
     /// has been changed to lower its band (as computed by
-    /// [`band_height_p1`][MeshBase::band_height_p1]).  Return the
+    /// [`band_height_p1`][Mesh::band_height_p1]).  Return the
     /// permutation `p` of the points as it is needed to transfer
     /// vectors defined on the initial labeling to the new one.  The
     /// relation `p[i] == j` means that `j` is the new label for the
@@ -1083,9 +1009,9 @@ pub enum DrawBox {
     Full
 }
 
-/// Scilab Output.  Created by [`MeshBase::scilab`].
+/// Scilab Output.  Created by [`Mesh::scilab`].
 pub struct Scilab<'a, M>
-where M: MeshBase + ?Sized {
+where M: Mesh + ?Sized {
     mesh: &'a M,
     z: &'a dyn P1,
     longitude: f64,
@@ -1122,7 +1048,7 @@ where M: Mesh {
     }
 
     /// Saves the mesh data and the function values `z` on the mesh
-    /// (see [`MeshBase::scilab`]) so that when Scilab runs the created
+    /// (see [`Mesh::scilab`]) so that when Scilab runs the created
     /// `path`.sci script, the graph of the function is drawn.  Note
     /// that this method also creates `path`.x.dat, `path`.y.dat, and
     /// `path`.z.dat to hold Scilab matrices.
@@ -1244,9 +1170,9 @@ impl Display for LineStyle {
     }
 }
 
-/// Matlab Output.  Created by [`MeshBase::matlab`].
+/// Matlab Output.  Created by [`Mesh::matlab`].
 pub struct Matlab<'a, M>
-where M: MeshBase + ?Sized {
+where M: Mesh + ?Sized {
     mesh: &'a M,
     z: &'a dyn P1,
     edge_color: EdgeColor,
@@ -1255,9 +1181,9 @@ where M: MeshBase + ?Sized {
 }
 
 impl<'a, M> Matlab<'a, M>
-where M: MeshBase {
+where M: Mesh {
     /// Saves the mesh data and the function values `z` on the mesh
-    /// (see [`MeshBase::matlab`]) so that when Matlab runs the
+    /// (see [`Mesh::matlab`]) so that when Matlab runs the
     /// created `path`.m script, the graph of the function is drawn.
     /// It is mandated by Matlab that the filename should contain only
     /// alphanumeric characters. Other characters in the filename will
@@ -1305,13 +1231,13 @@ where M: MeshBase {
 // Matplotlib Output
 
 pub struct Matplotlib<'a, M>
-where M: MeshBase + ?Sized {
+where M: Mesh + ?Sized {
     mesh: &'a M,
     z: &'a dyn P1,
 }
 
 impl<'a, M> Matplotlib<'a, M>
-where M: MeshBase {
+where M: Mesh {
     pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<(), io::Error> {
         let py = path.as_ref().with_extension("py");
         let mut f = File::create(&py)?;
@@ -1384,49 +1310,38 @@ mod tests {
         #[derive(Debug, PartialEq, Eq, Clone)]
         struct M {
             n_points: usize,
-            edge: Vec<(usize, usize)>,
-        }
-        impl MeshBase for M {
-            fn n_points(&self) -> usize { self.n_points }
-            fn point(&self, _: usize) -> (f64, f64) { todo!() }
-            fn n_triangles(&self) -> usize { todo!() }
-            fn triangle(&self, _: usize) -> (usize, usize, usize) { todo!() }
+            triangles: Vec<(usize, usize, usize)>,
         }
         impl Mesh for M {
-            fn n_edges(&self) -> usize { self.edge.len() }
-            fn edge(&self, i: usize) -> (usize, usize) { self.edge[i] }
-            fn edge_marker(&self, _: usize) -> i32 { todo!() }
+            fn n_points(&self) -> usize { self.n_points }
+            fn point(&self, _: usize) -> (f64, f64) { todo!() }
+            fn n_triangles(&self) -> usize { self.triangles.len() }
+            fn triangle(&self, i: usize) -> (usize, usize, usize) {
+                self.triangles[i]
+            }
         }
         impl Permutable for M {
             fn permute_points(&mut self, p: &Permutation) {
-                for e in &mut self.edge {
-                    if p[e.0] <= p[e.1] { *e = (p[e.0], p[e.1]) }
-                    else { *e = (p[e.1], p[e.0]) }
+                for t in &mut self.triangles {
+                    *t = sort3(p[t.0], p[t.1], p[t.2])
                 }
             }
         }
-        fn band(x: &M) -> usize {
-            let mut b = 0;
-            for (i,j) in &x.edge {
-                b = b.max(if i <= j { j - i } else { i - j })
-            }
-            b
-        }
         let mut before = M {
             n_points: 8,
-            edge: vec![(0,4), (1,2), (1,5), (1,7), (2,4), (3,6), (5,7)]
+            triangles: vec![(1,5,7), (1,2,7), (0,2,4), (3,6,7), (5,6,7)]
         };
         let mut after = M {
             n_points: 8,
-            edge: vec![(0,1), (2,3), (2,4), (3,4), (4,5), (5,6), (6,7)]
+            triangles: vec![(2,3,4), (3,4,5), (5,6,7), (0,1,3), (0,2,3)]
         };
         let p = before.clone().cuthill_mckee();
-        assert_eq!(p, Permutation::new([0, 3, 2, 6, 1, 4, 7, 5]).unwrap());
+        assert_eq!(p, Permutation::new([0, 3, 2, 6, 1, 5, 7, 4]).unwrap());
         let p = before.cuthill_mckee_rev();
-        assert_eq!(band(&before), band(&after));
-        assert_eq!(p, Permutation::new([7, 4, 5, 1, 6, 3, 0, 2]).unwrap());
-        before.edge.sort();
-        after.edge.sort();
+        assert_eq!(before.band_height_p1(), after.band_height_p1());
+        assert_eq!(p, Permutation::new([7, 4, 5, 1, 6, 2, 0, 3]).unwrap());
+        before.triangles.sort();
+        after.triangles.sort();
         assert_eq!(before, after);
     }
 }

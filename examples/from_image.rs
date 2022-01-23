@@ -10,7 +10,7 @@ use density_mesh_image::{
 use std::{env, fs::File, io, io::Write, path::Path};
 
 use rgb::{RGB, RGB8};
-use mesh2d::*;
+use mesh2d::Mesh;
 
 macro_rules! panic_on_err {
     ($e: expr, $loc: expr) => {
@@ -40,7 +40,6 @@ fn main() -> Result<(), GenericError> {
     let mut g = DensityMeshGenerator::new(vec![], map, s);
     panic_on_err!(g.process_wait(), "DensityMeshGenerator");
     let m = g.mesh().expect("Get the density mesh");
-    let m = Mesh2D::from(m);
     m.latex().save(Path::new(&img_file).with_extension("tex"))?;
 
     let u = eval(&m, |x,y| y - x);
