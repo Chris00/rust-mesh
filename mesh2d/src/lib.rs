@@ -1420,7 +1420,7 @@ where M: Mesh {
         }
         write!(f, "}};\n\
                    Graphics3D[GraphicsComplex[{0}`xyz, \
-                   Polygon[{0}`triangles]]]\n", pkg)
+                   Triangle[{0}`triangles]]]\n", pkg)
     }
 }
 
