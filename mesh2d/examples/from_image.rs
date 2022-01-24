@@ -45,6 +45,8 @@ fn main() -> Result<(), GenericError> {
     let u = eval(&m, |x,y| y - x);
     m.latex().super_levels(&u, [(0., YELLOW), (-200., BLUE)])
         .save(Path::new(&img_file).with_extension("1.tex"))?;
+    let u = eval(&m, |x,y|
+                 400. * ((x-250.).hypot(y-250.)/250.).cos());
     m.scilab(&u).save(&img_file)?;
     m.matlab(&u).save(&img_file)?;
     m.matplotlib(&u).save(&img_file)?;
