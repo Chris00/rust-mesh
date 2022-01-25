@@ -1398,16 +1398,17 @@ where M: Mesh {
         let mat = path.with_file_name(fname).with_extension("m");
         let mut f = File::create(&mat)?;
         let m = self.mesh;
+        let z = self.z;
         write!(f, "(* Created by the Rust mesh2d crate. *)\n")?;
         if m.n_points() == 0 {
             write!(f, "\"No points in the mesh!\"\n")?;
             return Ok(())
         }
-        write!(f, "{}`xyz = {{", pkg)?;
-        write_3d_point(&mut f, m.point(0), self.z.index(0))?;
+        write!(f, "{}`pts = {{", pkg)?;
+        write_3d_point(&mut f, m.point(0), z.index(0))?;
         for i in 1 .. m.n_points() {
             write!(f, ", ")?;
-            write_3d_point(&mut f, m.point(i), self.z.index(i))?;
+            write_3d_point(&mut f, m.point(i), z.index(i))?;
         }
         write!(f, "}};\n\
                    {}`triangles = {{", pkg)?;
@@ -1418,9 +1419,25 @@ where M: Mesh {
             let (i1, i2, i3) = m.triangle(t);
             write!(f, ", {{{},{},{}}}", i1+1, i2+1, i3+1)?;
         }
+        write!(f, "}};\n")?;
+        let mut z_min = f64::MAX;
+        let mut z_max = f64::MIN;
+        for i in 0 .. m.n_points() {
+            let zi = z.index(i);
+            if zi < z_min { z_min = zi }
+            if zi > z_max { z_max = zi }
+        }
+        let dz = z_max - z_min;
+        write!(f, "(* z values as a percentage ∈ [0, 1] *)\n\
+                   {}`zpct = {{{:.6}", pkg, (z.index(0) - z_min) / dz)?;
+        for i in 1 .. m.n_points() {
+            write!(f, ", {:.6}", (z.index(i) - z_min) / dz)?;
+        }
         write!(f, "}};\n\
-                   Graphics3D[GraphicsComplex[{0}`xyz, \
-                   Triangle[{0}`triangles]]]\n", pkg)
+                   Graphics3D[\n  \
+                   GraphicsComplex[{0}`pts, Triangle[{0}`triangles],\n    \
+                   VertexColors ->\n      Map[Function[z, \
+                   ColorData[\"SouthwestColors\"][z]], {0}`zpct]]]\n", pkg)
     }
 }
 
