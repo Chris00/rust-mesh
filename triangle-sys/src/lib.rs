@@ -209,8 +209,8 @@ mod test {
     #[test]
     fn test_triunsuitable() {
         let triswitches = b"zpDu"; // u → triunsuitable
-        let square = [(0.,0.), (1.,0.), (1.,1.), (0.,1.)];
-        let segments = [(0,1), (1,2), (2,3), (3,0)];
+        let square = [[0.,0.], [1.,0.], [1.,1.], [0.,1.]];
+        let segments = [[0,1], [1,2], [2,3], [3,0]];
         let input = triangulateio {
             pointlist: square.as_ptr() as *mut _,
             numberofpoints: square.len() as i32,
