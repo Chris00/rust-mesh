@@ -338,7 +338,7 @@ pub trait Mesh {
             panic!("mesh2d::Mesh::mathematica: z.len() = {} but \
                     expected {}", z.len(), self.n_points());
         }
-        Mathematica { mesh: self, z }
+        Mathematica { mesh: self, z, pt_color: None }
     }
 }
 
@@ -1355,6 +1355,7 @@ pub struct Mathematica<'a, M>
 where M: Mesh + ?Sized {
     mesh: &'a M,
     z: &'a dyn P1,
+    pt_color: Option<Box<dyn Fn(usize) -> RGB8 + 'a>>,
 }
 
 fn write_f64(f: &mut File, x: f64) -> Result<(), io::Error> {
@@ -1379,6 +1380,13 @@ fn write_3d_point(f: &mut File,
 
 impl<'a, M> Mathematica<'a, M>
 where M: Mesh {
+    /// Specify a function `c` that give the color `c(i)` for each
+    /// point index `i`.
+    pub fn color<C>(self, c: C) -> Self
+    where C: Fn(usize) -> RGB8 + 'a {
+        Mathematica { pt_color: Some(Box::new(c)), .. self }
+    }
+
     /// Saves the mesh data and the function values `z` on the mesh
     /// (see [`Mesh::mathematica`]) so that when Mathematica runs
     /// the created `path`.m script, the graph of the function is drawn.
@@ -1420,24 +1428,48 @@ where M: Mesh {
             write!(f, ", {{{},{},{}}}", i1+1, i2+1, i3+1)?;
         }
         write!(f, "}};\n")?;
-        let mut z_min = f64::MAX;
-        let mut z_max = f64::MIN;
-        for i in 0 .. m.n_points() {
-            let zi = z.index(i);
-            if zi < z_min { z_min = zi }
-            if zi > z_max { z_max = zi }
+        match &self.pt_color {
+            None => {
+                let mut z_min = f64::MAX;
+                let mut z_max = f64::MIN;
+                for i in 0 .. m.n_points() {
+                    let zi = z.index(i);
+                    if zi < z_min { z_min = zi }
+                    if zi > z_max { z_max = zi }
+                }
+                let dz = z_max - z_min;
+                write!(f, "(* z values as a percentage ∈ [0, 1] *)\n\
+                           {}`zpct = {{{:.6}", pkg, (z.index(0) - z_min) / dz)?;
+                for i in 1 .. m.n_points() {
+                    write!(f, ", {:.6}", (z.index(i) - z_min) / dz)?;
+                }
+                write!(f, "}};\n\
+                           Graphics3D[\n  \
+                           GraphicsComplex[{0}`pts, \
+                           Triangle[{0}`triangles],\n    \
+                           VertexColors ->\n      Map[Function[z, \
+                           ColorData[\"SouthwestColors\"][z]], {0}`zpct]]]\n",
+                       pkg)
+            }
+            Some(color) => {
+                let c0 = color(0);
+                write!(f, "(* RGB color for each point. *)\n\
+                           {}`colors = {{{{{},{},{}}}", pkg,
+                       c0.r as f32 / 255., c0.g as f32 / 255.,
+                       c0.b as f32 / 255.)?;
+                for i in 1 .. m.n_points() {
+                    let c = color(i);
+                    write!(f, ", {{{},{},{}}}",
+                           c.r as f32 / 255., c.g as f32 / 255.,
+                           c.b as f32 / 255.)?;
+                }
+                write!(f, "}};\n\
+                           Graphics3D[\n  \
+                           GraphicsComplex[{0}`pts, \
+                           Triangle[{0}`triangles],\n    \
+                           VertexColors -> {0}`colors]]\n", pkg)
+            }
         }
-        let dz = z_max - z_min;
-        write!(f, "(* z values as a percentage ∈ [0, 1] *)\n\
-                   {}`zpct = {{{:.6}", pkg, (z.index(0) - z_min) / dz)?;
-        for i in 1 .. m.n_points() {
-            write!(f, ", {:.6}", (z.index(i) - z_min) / dz)?;
-        }
-        write!(f, "}};\n\
-                   Graphics3D[\n  \
-                   GraphicsComplex[{0}`pts, Triangle[{0}`triangles],\n    \
-                   VertexColors ->\n      Map[Function[z, \
-                   ColorData[\"SouthwestColors\"][z]], {0}`zpct]]]\n", pkg)
     }
 }
 

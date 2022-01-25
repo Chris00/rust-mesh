@@ -51,6 +51,10 @@ fn main() -> Result<(), GenericError> {
     m.matlab(&u).save(&img_file)?;
     m.matplotlib(&u).save(&img_file)?;
     m.mathematica(&u).save(&img_file)?;
+    // let c = |i: usize| {
+    //     let z = (255. * ((u[i] - 200.) / 200.).clamp(0., 1.)) as u8;
+    //     RGB {r: z / 2, g: z, b: z}};
+    // m.mathematica(&u).color(c).save(&img_file)?;
 
     alpha_triangles(&m, &img, Path::new(&img_file).with_extension("2.tex"))?;
     Ok(())
