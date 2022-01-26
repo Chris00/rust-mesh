@@ -38,7 +38,7 @@
 //!
 //! [Triangle]: http://www.cs.cmu.edu/~quake/triangle.html
 
-use ::std::{os::raw::{c_char, c_int},
+use ::std::{os::raw::{c_char, c_int, c_void},
             ptr};
 
 /// Structure to pass data into and out of the [`triangulate`] function.
@@ -145,6 +145,10 @@ extern "C" {
         out: *mut triangulateio,
         vorout: *mut triangulateio,
     );
+
+    /// The pointers of [`triangulateio`] **must** be deallocated
+    /// using this function.
+    pub fn trifree(memptr: *mut c_void);
 }
 
 
