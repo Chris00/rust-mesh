@@ -173,13 +173,13 @@ pub trait Mesh {
     /// Return the coordinates (x,y) of the point of index `i` (where
     /// it is assumed that 0 ≤ `i` < `n_points()`).  The coordinates
     /// **must** be finite numbers.
-    fn point(&self, i: usize) -> (f64, f64);
+    fn point(&self, i: usize) -> [f64; 2];
     /// Number of triangles in the mesh.
     fn n_triangles(&self) -> usize;
     /// The 3 corners (p₁, p₂, p₃) of the triangle `i`:
     /// 0 ≤ pₖ < `n_points()` are the indices of the corresponding
     /// points.
-    fn triangle(&self, i: usize) -> (usize, usize, usize);
+    fn triangle(&self, i: usize) -> [usize; 3];
 
     /// Return the bounding box enclosing the mesh.  If the mesh is
     /// empty, `xmin` = `ymin` = +∞ and `xmax` = `ymax` = -∞.
@@ -189,7 +189,7 @@ pub trait Mesh {
         let mut ymin = f64::INFINITY;
         let mut ymax = f64::NEG_INFINITY;
         for i in 0 .. self.n_points() {
-            let (x, y) = self.point(i);
+            let [x, y] = self.point(i);
             if x < xmin { xmin = x }
             if x < xmax { xmax = x }
             if y < ymin { ymin = y }
@@ -206,7 +206,7 @@ pub trait Mesh {
     fn band_height_p1(&self) -> usize {
         let mut kd = 0_usize;
         for i in 0 .. self.n_triangles() {
-            let (i1, i2, i3) = sort3(self.triangle(i));
+            let [i1, i2, i3] = sort3(self.triangle(i));
             kd = kd.max(i3 - i2).max(i3 - i1).max(i2 - i1);
         }
         kd + 1
@@ -218,7 +218,7 @@ pub trait Mesh {
     where P: FnMut(usize) -> bool {
         let mut kd = 0_usize;
         for i in 0 .. self.n_triangles() {
-            let (i1, i2, i3) = sort3(self.triangle(i));
+            let [i1, i2, i3] = sort3(self.triangle(i));
             if predicate(i1) {
                 if predicate(i2) {
                     if predicate(i3) {
@@ -345,13 +345,13 @@ pub trait Mesh {
 
 /// Return the triple made of `p1`, `p2`, and `p3` sorted in
 /// increasing order.  Helper function.
-fn sort3((p1, p2, p3): (usize, usize, usize)) -> (usize, usize, usize) {
+fn sort3([p1, p2, p3]: [usize; 3]) -> [usize; 3] {
     if p1 <= p2 {
-        if p2 <= p3 { (p1, p2, p3) }
-        else if p1 <= p3 { (p1, p3, p2) } else { (p3, p1, p2) }
+        if p2 <= p3 { [p1, p2, p3] }
+        else if p1 <= p3 { [p1, p3, p2] } else { [p3, p1, p2] }
     } else { // p2 < p1
-        if p1 <= p3 { (p2, p1, p3) }
-        else if p2 <= p3 { (p2, p3, p1) } else { (p3, p2, p1) }
+        if p1 <= p3 { [p2, p1, p3] }
+        else if p2 <= p3 { [p2, p3, p1] } else { [p3, p2, p1] }
     }
 }
 
@@ -397,7 +397,7 @@ macro_rules! cuthill_mckee_base {
         // List of adjacent nodes:
         let mut nbh = vec![HashSet::new(); n];
         for t in 0 .. $m.n_triangles() {
-            let (p1, p2, p3) = $m.triangle(t);
+            let [p1, p2, p3] = $m.triangle(t);
             if nbh[p1].insert(p2) { deg[p1] += 1 }
             if nbh[p1].insert(p3) { deg[p1] += 1 }
             if nbh[p2].insert(p1) { deg[p2] += 1 }
@@ -559,7 +559,7 @@ impl Edges {
     fn new<M: Mesh + ?Sized>(m: &M) -> Self {
         let mut e = HashMap::new();
         for t in 0 .. m.n_triangles() {
-            let (p1, p2, p3) = sort3(m.triangle(t));
+            let [p1, p2, p3] = sort3(m.triangle(t));
             let cnt = e.entry((p1, p2)).or_insert(2);
             *cnt -= 1;
             let cnt = e.entry((p1, p3)).or_insert(2);
@@ -620,41 +620,41 @@ macro_rules! meth_levels {
     }
 }
 
-fn mid((x1, y1): (f64, f64), (x2, y2): (f64, f64)) -> (f64, f64) {
-    (0.5 * (x1 + x2), 0.5 * (y1 + y2))
+fn mid([x1, y1]: [f64; 2], [x2, y2]: [f64; 2]) -> [f64; 2] {
+    [0.5 * (x1 + x2), 0.5 * (y1 + y2)]
 }
 
-fn intercept((x1, y1): (f64, f64), z1: f64, (x2, y2): (f64, f64), z2: f64,
-             level: f64) -> (f64, f64) {
+fn intercept([x1, y1]: [f64; 2], z1: f64, [x2, y2]: [f64; 2], z2: f64,
+             level: f64) -> [f64; 2] {
     let d = z1 - z2;
     let a = level - z2;
     let b = z1 - level;
-    ((a * x1 + b * x2) / d,  (a * y1 + b * y2) / d)
+    [(a * x1 + b * x2) / d,  (a * y1 + b * y2) / d]
 }
 
 fn line<W: Write>(w: &mut W, c: RGB8,
-                  (x0,y0): (f64,f64), (x1,y1): (f64,f64)) -> io::Result<()> {
+                  [x0,y0]: [f64; 2], [x1,y1]: [f64; 2]) -> io::Result<()> {
     write!(w, "  \\meshline{{{},{},{}}}{{{:.12}}}{{{:.12}}}\
                {{{:.12}}}{{{:.12}}}\n", c.r, c.g, c.b, x0, y0, x1, y1)
 }
 
 fn point<W: Write>(w: &mut W, c: RGB8,
-                   i: usize, (x,y): (f64,f64)) -> io::Result<()> {
+                   i: usize, [x,y]: [f64; 2]) -> io::Result<()> {
     write!(w, "  \\meshpoint{{{},{},{}}}{{{}}}{{{:.12}}}{{{:.12}}}\n",
            c.r, c.g, c.b, i, x, y)
 }
 
 fn triangle<W: Write>(w: &mut W, c: RGB8,
-                      (x1,y1): (f64,f64), (x2,y2): (f64,f64),
-                      (x3,y3): (f64,f64)) -> io::Result<()> {
+                      [x1,y1]: [f64; 2], [x2,y2]: [f64; 2],
+                      [x3,y3]: [f64; 2]) -> io::Result<()> {
     write!(w, "  \\meshtriangle{{{},{},{}}}{{{:.12}}}{{{:.12}}}\
                {{{:.12}}}{{{:.12}}}{{{:.12}}}{{{:.12}}}\n",
            c.r, c.g, c.b, x1, y1, x2, y2, x3, y3)
 }
 
 fn quadrilateral<W: Write>(
-    w: &mut W, c: RGB8, (x1,y1): (f64,f64), (x2,y2): (f64,f64),
-    (x3,y3): (f64,f64), (x4,y4): (f64,f64)) -> io::Result<()> {
+    w: &mut W, c: RGB8, [x1,y1]: [f64; 2], [x2,y2]: [f64; 2],
+    [x3,y3]: [f64; 2], [x4,y4]: [f64; 2]) -> io::Result<()> {
     write!(w, "  \\meshquadrilateral{{{},{},{}}}{{{:.12}}}{{{:.12}}}\
                {{{:.12}}}{{{:.12}}}{{{:.12}}}{{{:.12}}}{{{:.12}}}{{{:.12}}}\n",
            c.r, c.g, c.b, x1, y1, x2, y2, x3, y3, x4, y4)
@@ -674,7 +674,7 @@ macro_rules! write_xxx_levels {
     ($w: ident, $m: ident, $z: ident, $levels: expr, $rev: ident) => {
         for &(l, color) in &$levels {
             for t in 0 .. $m.n_triangles() {
-                let (i1, i2, i3) = $m.triangle(t);
+                let [i1, i2, i3] = $m.triangle(t);
                 let p1 = $m.point(i1);
                 let z1 = $z.index(i1);
                 let p2 = $m.point(i2);
@@ -830,7 +830,7 @@ where M: Mesh {
         let e = Edges::new(m);
         // Write level lines for each triangle.
         for t in 0 .. m.n_triangles() {
-            let (i1, i2, i3) = m.triangle(t);
+            let [i1, i2, i3] = m.triangle(t);
             let p1 = m.point(i1);
             let z1 = z.index(i1);
             let p2 = m.point(i2);
@@ -1148,22 +1148,22 @@ where M: Mesh {
             ($fn: ident, $m: expr, $coord: expr) => {
                 let mut f = File::create($fn)?;
                 for t in 0 .. $m.n_triangles() {
-                    write!(f, "{:16e} ", $coord($m.triangle(t).0))?;
+                    write!(f, "{:16e} ", $coord($m.triangle(t)[0]))?;
                 }
                 write!(f, "\n")?;
                 for t in 0 .. $m.n_triangles() {
-                    write!(f, "{:16e} ", $coord($m.triangle(t).1))?;
+                    write!(f, "{:16e} ", $coord($m.triangle(t)[1]))?;
                 }
                 write!(f, "\n")?;
                 for t in 0 .. $m.n_triangles() {
-                    write!(f, "{:16e} ", $coord($m.triangle(t).2))?;
+                    write!(f, "{:16e} ", $coord($m.triangle(t)[2]))?;
                 }
                 write!(f, "\n")?;
                 f.flush()?;
             }
         }
-        save_mat!(xf, self.mesh, |i| self.mesh.point(i).0);
-        save_mat!(yf, self.mesh, |i| self.mesh.point(i).1);
+        save_mat!(xf, self.mesh, |i| self.mesh.point(i)[0]);
+        save_mat!(yf, self.mesh, |i| self.mesh.point(i)[1]);
         save_mat!(zf, self.mesh, |i| self.z.index(i));
         Ok(())
     }
@@ -1254,16 +1254,16 @@ where M: Mesh {
                mat.display(), pdf.file_name().unwrap())?;
         write!(f, "mesh_x = [")?;
         for i in 0 .. m.n_points() {
-            write!(f, "{:.16e} ", m.point(i).0)?; }
+            write!(f, "{:.16e} ", m.point(i)[0])?; }
         write!(f, "];\nmesh_y = [")?;
         for i in 0 .. m.n_points() {
-            write!(f, "{:.16e} ", m.point(i).1)?; }
+            write!(f, "{:.16e} ", m.point(i)[1])?; }
         write!(f, "];\nmesh_z = [")?;
         for i in 0 .. m.n_points() {
             write!(f, "{:.16e} ", self.z.index(i))?; }
         write!(f, "];\nmesh_triangles = [")?;
         for t in 0 .. m.n_triangles() {
-            let (p1, p2, p3) = m.triangle(t);
+            let [p1, p2, p3] = m.triangle(t);
             // Matlab uses indexing from 1.
             write!(f, "{} {} {}; ", p1 + 1, p2 + 1, p3 + 1)?; }
         write!(f, "];\ntrisurf(mesh_triangles, mesh_x, mesh_y, mesh_z, \
@@ -1298,20 +1298,20 @@ where M: Mesh {
                      def __init__(self):\n        \
                        self.x = [")?;
         for i in 0 .. m.n_points() {
-            write!(f, "{:.16e}, ", m.point(i).0)?; }
+            write!(f, "{:.16e}, ", m.point(i)[0])?; }
         write!(f, "]\n        self.y = [")?;
         for i in 0 .. m.n_points() {
-            write!(f, "{:.16e}, ", m.point(i).1)?; }
+            write!(f, "{:.16e}, ", m.point(i)[1])?; }
         write!(f, "]\n        self.z = [")?;
         for i in 0 .. m.n_points() {
             write!(f, "{:.16e}, ", self.z.index(i))?; }
         // https://matplotlib.org/stable/api/tri_api.html
         write!(f, "]\n        self.triangles = [")?;
         for t in 0 .. m.n_triangles() {
-            let (p0, p1, p2) = m.triangle(t);
-            let (x0, y0) = m.point(p0);
-            let (x1, y1) = m.point(p1);
-            let (x2, y2) = m.point(p2);
+            let [p0, p1, p2] = m.triangle(t);
+            let [x0, y0] = m.point(p0);
+            let [x1, y1] = m.point(p1);
+            let [x2, y2] = m.point(p2);
             let dx1 = x1 - x0;  let dy1 = y1 - y0;
             let dx2 = x2 - x0;  let dy2 = y2 - y0;
             let e1 = - dx2 * dx1 - dy2 * dy1;
@@ -1372,7 +1372,7 @@ fn write_f64(f: &mut File, x: f64) -> Result<(), io::Error> {
 }
 
 fn write_3d_point(f: &mut File,
-                  (x, y): (f64, f64), z: f64) -> Result<(), io::Error> {
+                  [x, y]: [f64; 2], z: f64) -> Result<(), io::Error> {
     write!(f, "{{")?; write_f64(f, x)?;
     write!(f, ",")?;  write_f64(f, y)?;
     write!(f, ",")?;  write_f64(f, z)?;  write!(f, "}}")
@@ -1421,10 +1421,10 @@ where M: Mesh {
         write!(f, "}};\n\
                    {}`triangles = {{", pkg)?;
         // Mathematica indices start at 1.
-        let (i1, i2, i3) = m.triangle(0);
+        let [i1, i2, i3] = m.triangle(0);
         write!(f, "{{{},{},{}}}", i1+1, i2+1, i3+1)?;
         for t in 1 .. m.n_triangles() {
-            let (i1, i2, i3) = m.triangle(t);
+            let [i1, i2, i3] = m.triangle(t);
             write!(f, ", {{{},{},{}}}", i1+1, i2+1, i3+1)?;
         }
         write!(f, "}};\n")?;
@@ -1485,30 +1485,30 @@ mod tests {
         #[derive(Debug, PartialEq, Eq, Clone)]
         struct M {
             n_points: usize,
-            triangles: Vec<(usize, usize, usize)>,
+            triangles: Vec<[usize; 3]>,
         }
         impl Mesh for M {
             fn n_points(&self) -> usize { self.n_points }
-            fn point(&self, _: usize) -> (f64, f64) { todo!() }
+            fn point(&self, _: usize) -> [f64; 2] { todo!() }
             fn n_triangles(&self) -> usize { self.triangles.len() }
-            fn triangle(&self, i: usize) -> (usize, usize, usize) {
+            fn triangle(&self, i: usize) -> [usize; 3] {
                 self.triangles[i]
             }
         }
         impl Permutable for M {
             fn permute_points(&mut self, p: &Permutation) {
-                for t in &mut self.triangles {
-                    *t = sort3((p[t.0], p[t.1], p[t.2]))
+                for t @&mut [t1, t2, t3] in &mut self.triangles {
+                    *t = sort3([p[t1], p[t2], p[t3]])
                 }
             }
         }
         let mut before = M {
             n_points: 8,
-            triangles: vec![(1,5,7), (1,2,7), (0,2,4), (3,6,7), (5,6,7)]
+            triangles: vec![[1,5,7], [1,2,7], [0,2,4], [3,6,7], [5,6,7]]
         };
         let mut after = M {
             n_points: 8,
-            triangles: vec![(2,3,4), (3,4,5), (5,6,7), (0,1,3), (0,2,3)]
+            triangles: vec![[2,3,4], [3,4,5], [5,6,7], [0,1,3], [0,2,3]]
         };
         let p = before.clone().cuthill_mckee();
         assert_eq!(p, Permutation::new([0, 3, 2, 6, 1, 5, 7, 4]).unwrap());
