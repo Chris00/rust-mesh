@@ -1,22 +1,5 @@
 //! Low-level bindings to [Triangle][].
 //!
-//! ## Triunsuitable
-//!
-//! The triangle library is compiled with `EXTERNAL_TEST` which means
-//! that you can define your own `triunsuitable` function.  In otder
-//! to do that, activate the `triunsuitable` feature of this crate and
-//! write a function (replacing `todo!()` with actual code 😀):
-//!
-//! ```no_run
-//! #[no_mangle]
-//! extern "C" fn triunsuitable(triorg: &[f64; 2], tridest: &[f64; 2],
-//!                             triapex: &[f64; 2], area: f64) -> bool {
-//!     todo!()
-//! }
-//! ```
-//!
-//! This function returns `true` if the triangle is too large and
-//! should be refined, `false` otherwise.
 //!
 //! ## License of the Triangle C library
 //!
@@ -39,9 +22,11 @@
 //! [Triangle]: http://www.cs.cmu.edu/~quake/triangle.html
 
 use ::std::{os::raw::{c_char, c_int, c_void},
-            ptr};
+            ptr,
+            sync::{Mutex, Once}};
 
-/// Structure to pass data into and out of the [`triangulate`] function.
+/// Structure to pass data into and out of the
+/// [`triangulate_with_triunsuitable`] function.
 ///
 /// Arrays are used to store points, triangles, markers, and so forth.
 /// In all cases, the first item in any array is stored starting at
@@ -167,7 +152,7 @@ extern "C" {
     /// output, and the Voronoi output.  If the `v` (Voronoi output)
     /// switch is not used, `vorout` may be NULL.  `in` and `out` may
     /// never be NULL.
-    pub fn triangulate(
+    fn triangulate(
         triswitches: *const c_char,
         in_: *const triangulateio,
         out: *mut triangulateio,
@@ -179,16 +164,77 @@ extern "C" {
     pub fn trifree(memptr: *mut c_void);
 }
 
+// The lock is separate because we want to lock, then set
+// `triunsuitable` and launch `triangulate` (which will repeatedly
+// call `TRIUNSUITABLE`) and finally unlock.
+static mut TRIUNSUITABLE: fn(&[f64; 2], &[f64; 2], &[f64; 2], f64) -> bool
+    = default_triunsuitable;
+static mut TRIUNSUITABLE_MUTEX: Option<Mutex<()>> = None;
+static TRIUNSUITABLE_INIT: Once = Once::new();
 
+#[no_mangle]
+extern "C" fn triunsuitable(triorg: &[f64; 2], tridest: &[f64; 2],
+                            triapex: &[f64; 2], area: f64) -> bool {
+    // Protect against unwinding in C code.
+    match std::panic::catch_unwind(|| {
+        unsafe { TRIUNSUITABLE(triorg, tridest, triapex, area) }
+    }) {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("Error in callback triunsuitable: {:?}", e);
+            std::process::abort() // Doesn't unwind
+        }
+    }
+}
+
+/// Triangulate the PSLG or refine the mesh (depending on the
+/// switches).
+///
+/// `triswitches` string containing the command line switches you
+/// wish to invoke.  No initial dash is required.
+///
+/// `in_`, `out`, and `vorout` are descriptions of the input, the
+/// output, and the Voronoi output.  If the `v` (Voronoi output)
+/// switch is not used, `vorout` may be NULL.  `in` and `out` may
+/// never be NULL.
+///
+/// This function performs the triangulation with the provided
+/// `triunsuitable` function.  Since Triangle only makes it possible
+/// to set this function globally, this call ensures that it is thread
+/// safe.
+///
+/// `triunsuitable` is a function used to determine whether or not a
+/// triangle is too big (and needs to be refined).  More precisely,
+/// `triunsuitable(p1, p2, p3, area)` must return `true` if the
+/// triangle is too big.  The arguments are as follow:
+/// - `p1` is the triangle's origin vertex.
+/// - `p2` is the triangle's destination vertex.
+/// - `p3` is the triangle's apex vertex.
+/// - `area` is the area of the triangle.
+pub unsafe fn triangulate_with_triunsuitable(
+    triswitches: *const c_char,
+    in_: *const triangulateio,
+    out: *mut triangulateio,
+    vorout: *mut triangulateio,
+    triunsuitable: fn(&[f64; 2], &[f64; 2], &[f64; 2], f64) -> bool) {
+    TRIUNSUITABLE_INIT.call_once(|| {
+        TRIUNSUITABLE_MUTEX = Some(Mutex::new(()));
+    });
+    let guard = match &TRIUNSUITABLE_MUTEX {
+        Some(m) => m.lock().unwrap(),
+        None => unreachable!() // Initialized
+    };
+    TRIUNSUITABLE = triunsuitable;
+    triangulate(triswitches, in_, out, vorout);
+    drop(guard); // unlock
+}
 
 /// Default `triunsuitable` function.
 ///
 /// This function is a Rust transcription of the default one used in
 /// Triangle code.
-#[cfg(not(feature = "triunsuitable"))]
-#[no_mangle]
-extern "C" fn triunsuitable(triorg: &[f64; 2], tridest: &[f64; 2],
-                 triapex: &[f64; 2], _area: f64) -> bool {
+pub fn default_triunsuitable(triorg: &[f64; 2], tridest: &[f64; 2],
+                             triapex: &[f64; 2], _area: f64) -> bool {
     let dxoa = triorg[0] - triapex[0];
     let dyoa = triorg[1] - triapex[1];
     let dxda = tridest[0] - triapex[0];
@@ -232,6 +278,11 @@ mod test {
         unsafe {
             super::triangulate(triswitches.as_ptr() as *const i8,
                                &input, &mut output, &mut vorout);
+
+            super::triangulate_with_triunsuitable(
+                triswitches.as_ptr() as *const i8,
+                &input, &mut output, &mut vorout,
+                super::default_triunsuitable);
         }
     }
 }
