@@ -128,6 +128,34 @@ pub struct triangulateio {
     pub numberofedges: c_int,
 }
 
+/// Convenience constant to help only fill the required fields using
+/// the struct update syntax.
+pub const EMPTY_TRIANGULATEIO: triangulateio = triangulateio {
+    pointlist: ptr::null_mut(),
+    pointattributelist: ptr::null_mut(),
+    pointmarkerlist: ptr::null_mut(),
+    numberofpoints: 0,
+    numberofpointattributes: 0,
+    trianglelist: ptr::null_mut(),
+    triangleattributelist: ptr::null_mut(),
+    trianglearealist: ptr::null_mut(),
+    neighborlist: ptr::null_mut(),
+    numberoftriangles: 0,
+    numberofcorners: 3,
+    numberoftriangleattributes: 0,
+    segmentlist: ptr::null_mut(),
+    segmentmarkerlist: ptr::null_mut(),
+    numberofsegments: 0,
+    holelist: ptr::null_mut(),
+    numberofholes: 0,
+    regionlist: ptr::null_mut(),
+    numberofregions: 0,
+    edgelist: ptr::null_mut(),
+    edgemarkerlist: ptr::null_mut(),
+    normlist: ptr::null_mut(),
+    numberofedges: 0,
+};
+
 extern "C" {
     /// Triangulate the PSLG or refine the mesh (depending on the
     /// switches).
@@ -177,33 +205,6 @@ extern "C" fn triunsuitable(triorg: &[f64; 2], tridest: &[f64; 2],
     maxlen > 0.05 * (triorg[0] * triorg[0] + triorg[1] * triorg[1]) + 0.02
 }
 
-/// Convenience constant to help only fill the required fields using
-/// the struct update syntax.
-pub const EMPTY_TRIANGULATEIO: triangulateio = triangulateio {
-    pointlist: ptr::null_mut(),
-    pointattributelist: ptr::null_mut(),
-    pointmarkerlist: ptr::null_mut(),
-    numberofpoints: 0,
-    numberofpointattributes: 0,
-    trianglelist: ptr::null_mut(),
-    triangleattributelist: ptr::null_mut(),
-    trianglearealist: ptr::null_mut(),
-    neighborlist: ptr::null_mut(),
-    numberoftriangles: 0,
-    numberofcorners: 3,
-    numberoftriangleattributes: 0,
-    segmentlist: ptr::null_mut(),
-    segmentmarkerlist: ptr::null_mut(),
-    numberofsegments: 0,
-    holelist: ptr::null_mut(),
-    numberofholes: 0,
-    regionlist: ptr::null_mut(),
-    numberofregions: 0,
-    edgelist: ptr::null_mut(),
-    edgemarkerlist: ptr::null_mut(),
-    normlist: ptr::null_mut(),
-    numberofedges: 0,
-};
 
 
 #[cfg(test)]
