@@ -22,7 +22,7 @@ pub struct Permutation(Vec<usize>);
 
 impl Display for Permutation {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
-        if self.0.len() == 0 {
+        if self.is_empty() {
             write!(f, "Permutation()")
         } else {
             write!(f, "Permutation({}", self.0[0])?;
@@ -35,7 +35,7 @@ impl Display for Permutation {
 }
 
 /// Check that `p` is a valid permutation.
-fn is_perm(p: &Vec<usize>) -> bool {
+fn is_perm(p: &[usize]) -> bool {
     let len = p.len();
     let mut taken = vec![false; len];
     for &j in p.iter() {
@@ -58,11 +58,15 @@ impl Permutation {
         if is_perm(&p) { Some(Permutation(p)) } else { None }
     }
 
+    /// Return `true` if the permutation acts on ∅.
+    pub fn is_empty(&self) -> bool { self.0.is_empty() }
+
     /// Return the length of the permutation (i.e., the permutation
     /// acts on {0,..., `len()`-1}).
     pub fn len(&self) -> usize { self.0.len() }
 
     /// Return the inverse of the permutation `self`.
+    #[must_use]
     pub fn inv(&self) -> Self {
         let mut inv = self.0.clone();
         for (i, &j) in self.0.iter().enumerate() {
@@ -324,7 +328,7 @@ pub trait Mesh {
     /// mesh.latex().sub_levels(&[1., 2., 3., 4.], levels).save("/tmp/foo")?;
     /// # Ok(()) }
     /// ```
-    fn latex<'a>(&'a self) -> LaTeX<'a, Self> {
+    fn latex(&self) -> LaTeX<Self> {
         LaTeX { mesh: self,  edges: Edges::new(self),
                 color: None,
                 boundary_color: None,
@@ -359,7 +363,7 @@ fn sort3([p1, p2, p3]: [usize; 3]) -> [usize; 3] {
 //
 // Band reduction
 
-fn arg_min_deg(deg: &Vec<i32>) -> usize {
+fn arg_min_deg(deg: &[i32]) -> usize {
     let mut i = 0;
     let mut degi = i32::MAX;
     for (j, &degj) in deg.iter().enumerate() {
@@ -492,6 +496,8 @@ pub trait P1 {
     fn len(&self) -> usize;
     /// The value of the function at the point of index `i`.
     fn index(&self, i: usize) -> f64;
+    /// Return `true` is the vector is empty.
+    fn is_empty(&self) -> bool { self.len() == 0 }
 }
 
 impl<const N: usize> P1 for [f64; N] {
@@ -608,6 +614,7 @@ macro_rules! sort_levels_decr { ($l: expr) => {{
 macro_rules! meth_levels {
     ($(#[$meta:meta])* $meth: ident, $act: ident, $sort: ident) => {
         $(#[$meta])*
+        #[must_use]
         pub fn $meth<Z, L>(self, z: &'a Z, levels: L) -> LaTeX<'a, M>
         where Z: P1 + 'a,
               L: IntoIterator<Item=(f64, RGB8)> {
@@ -634,29 +641,29 @@ fn intercept([x1, y1]: [f64; 2], z1: f64, [x2, y2]: [f64; 2], z2: f64,
 
 fn line<W: Write>(w: &mut W, c: RGB8,
                   [x0,y0]: [f64; 2], [x1,y1]: [f64; 2]) -> io::Result<()> {
-    write!(w, "  \\meshline{{{},{},{}}}{{{:.12}}}{{{:.12}}}\
-               {{{:.12}}}{{{:.12}}}\n", c.r, c.g, c.b, x0, y0, x1, y1)
+    writeln!(w, "  \\meshline{{{},{},{}}}{{{:.12}}}{{{:.12}}}\
+                 {{{:.12}}}{{{:.12}}}", c.r, c.g, c.b, x0, y0, x1, y1)
 }
 
 fn point<W: Write>(w: &mut W, c: RGB8,
                    i: usize, [x,y]: [f64; 2]) -> io::Result<()> {
-    write!(w, "  \\meshpoint{{{},{},{}}}{{{}}}{{{:.12}}}{{{:.12}}}\n",
+    writeln!(w, "  \\meshpoint{{{},{},{}}}{{{}}}{{{:.12}}}{{{:.12}}}",
            c.r, c.g, c.b, i, x, y)
 }
 
 fn triangle<W: Write>(w: &mut W, c: RGB8,
                       [x1,y1]: [f64; 2], [x2,y2]: [f64; 2],
                       [x3,y3]: [f64; 2]) -> io::Result<()> {
-    write!(w, "  \\meshtriangle{{{},{},{}}}{{{:.12}}}{{{:.12}}}\
-               {{{:.12}}}{{{:.12}}}{{{:.12}}}{{{:.12}}}\n",
+    writeln!(w, "  \\meshtriangle{{{},{},{}}}{{{:.12}}}{{{:.12}}}\
+                 {{{:.12}}}{{{:.12}}}{{{:.12}}}{{{:.12}}}",
            c.r, c.g, c.b, x1, y1, x2, y2, x3, y3)
 }
 
 fn quadrilateral<W: Write>(
     w: &mut W, c: RGB8, [x1,y1]: [f64; 2], [x2,y2]: [f64; 2],
     [x3,y3]: [f64; 2], [x4,y4]: [f64; 2]) -> io::Result<()> {
-    write!(w, "  \\meshquadrilateral{{{},{},{}}}{{{:.12}}}{{{:.12}}}\
-               {{{:.12}}}{{{:.12}}}{{{:.12}}}{{{:.12}}}{{{:.12}}}{{{:.12}}}\n",
+    writeln!(w, "  \\meshquadrilateral{{{},{},{}}}{{{:.12}}}{{{:.12}}}\
+                 {{{:.12}}}{{{:.12}}}{{{:.12}}}{{{:.12}}}{{{:.12}}}{{{:.12}}}",
            c.r, c.g, c.b, x1, y1, x2, y2, x3, y3, x4, y4)
 }
 
@@ -775,12 +782,14 @@ where M: Mesh {
     /// mesh.latex().color(Some(GREY));
     /// # Ok(()) }
     /// ```
+    #[must_use]
     pub fn color(self, color: Option<RGB8>) -> Self {
         LaTeX { color: Some(color), .. self }
     }
 
     /// Specify the color of edges on the boundary of the domain.
     /// If `None`, the boundary will not be drawn.
+    #[must_use]
     pub fn boundary_color(self, color: Option<RGB8>) -> Self {
         LaTeX { boundary_color: Some(color), .. self }
     }
@@ -802,21 +811,19 @@ where M: Mesh {
     where W: Write {
         let m = self.mesh;
         // Write points
-        write!(w, "  % {} points\n", m.n_points())?;
+        writeln!(w, "  % {} points", m.n_points())?;
         for i in 0 .. m.n_points() { point(w, BLACK, i, m.point(i))? }
         // Write lines
         let color = self.color.unwrap_or(default_color);
         let brdy_color = self.boundary_color.unwrap_or(Some(BLACK));
-        write!(w, "  % {} triangles\n", m.n_triangles())?;
+        writeln!(w, "  % {} triangles", m.n_triangles())?;
         for (&(p1, p2), &cnt) in self.edges.0.iter() {
             if cnt == 0 /* inside */ {
                 if let Some(c) = color {
                     line(w, c, m.point(p1), m.point(p2))?;
                 }
-            } else {
-                if let Some(c) = brdy_color {
-                    line(w, c, m.point(p1), m.point(p2))?;
-                }
+            } else if let Some(c) = brdy_color {
+                line(w, c, m.point(p1), m.point(p2))?;
             }
         }
         Ok(())
@@ -877,11 +884,9 @@ where M: Mesh {
                         if level_eq(l, z3) { // l = z1 = z3 ≠ z2
                             if ! e.on_boundary(i1, i3) {
                                 line(w, color, p1, p3)?
-                            } else {
-                                if (z2 < l && l < z3) || (z3 < l && l < z2) {
+                            } else if (z2 < l && l < z3) || (z3 < l && l < z2) {
                                 line(w, color, p1,
                                      intercept(p2, z2, p3, z3, l))?
-                                }
                             }
                         }
                     }
@@ -1072,24 +1077,29 @@ where M: Mesh + ?Sized {
 impl<'a, M> Scilab<'a, M>
 where M: Mesh {
     /// Set sets the longitude to `l` degrees of the observation point.
+    #[must_use]
     pub fn longitude(self, l: f64) -> Self {
         Scilab { longitude: l, .. self }
     }
 
     /// Sets the azimuth to `a` degrees of the observation point.
+    #[must_use]
     pub fn azimuth(self, a: f64) -> Self {
         Scilab { azimuth: a, .. self }
     }
 
     /// Set the mode for the drawing.
+    #[must_use]
     pub fn mode(self, mode: Mode) -> Self { Scilab { mode, .. self } }
 
     /// Specify how what the box arounf the plot should look like.
+    #[must_use]
     pub fn draw_box(self, draw_box: DrawBox) -> Self {
         Scilab { draw_box, .. self }
     }
 
     /// Color the edges using `color`.
+    #[must_use]
     pub fn edge(self, color: RGB8) -> Self {
         Scilab { edge_color: Some(color), .. self }
     }
@@ -1116,31 +1126,31 @@ where M: Mesh {
             DrawBox::Full => 4 };
         let mut f = File::create(&sci)?;
         let filename = |f: &'a PathBuf| -> &'a str {
-            f.file_name().map(std::ffi::OsStr::to_str).flatten()
+            f.file_name().and_then(std::ffi::OsStr::to_str)
                 .expect("mesh2d::Scilab::save: non UTF-8 file name") };
-        write!(f, "mode(0);\n\
-                   // Run in Scilab with: exec('{}')\n\
-                   // Written by the Rust mesh2d crate.\n\
-                   rust = struct('f', scf(), 'e', null, \
-                   'x', fscanfMat('{}'), 'y', fscanfMat('{}'), \
-                   'z', fscanfMat('{}'));\n\
-                   clf();\n\
-                   rust.e = gce();\n\
-                   rust.e.hiddencolor = -1;\n\
-                   rust.f.color_map = jetcolormap(100);\n",
+        writeln!(f, "mode(0);\n\
+                     // Run in Scilab with: exec('{}')\n\
+                     // Written by the Rust mesh2d crate.\n\
+                     rust = struct('f', scf(), 'e', null, \
+                     'x', fscanfMat('{}'), 'y', fscanfMat('{}'), \
+                     'z', fscanfMat('{}'));\n\
+                     clf();\n\
+                     rust.e = gce();\n\
+                     rust.e.hiddencolor = -1;\n\
+                     rust.f.color_map = jetcolormap(100);",
                sci.display(), filename(&xf), filename(&yf), filename(&zf))?;
         match self.edge_color {
             Some(c) if mode >= 0 => {
-                write!(f, "rust.f.color_map(1,:) = [{}, {}, {}];\n\
-                           xset('color', 1);\n",
-                       c.r as f64 / 255.,  c.g as f64 / 255.,
-                       c.b as f64 / 255.)?;
+                writeln!(f, "rust.f.color_map(1,:) = [{}, {}, {}];\n\
+                             xset('color', 1);",
+                         c.r as f64 / 255.,  c.g as f64 / 255.,
+                         c.b as f64 / 255.)?;
             }
             _ => ()
         }
-        write!(f, "plot3d1(rust.x, rust.y, rust.z, theta={}, alpha={}, \
-                   flag=[{},2,{}]);\n\
-                   disp('Save: xs2pdf(rust.f, ''{}.pdf'')');\n",
+        writeln!(f, "plot3d1(rust.x, rust.y, rust.z, theta={}, alpha={}, \
+                     flag=[{},2,{}]);\n\
+                     disp('Save: xs2pdf(rust.f, ''{}.pdf'')');",
                self.longitude, self.azimuth, mode, draw_box,
                filename(&sci))?;
         f.flush()?;
@@ -1245,7 +1255,7 @@ where M: Mesh {
             .to_str().unwrap_or("rust_matlab")
             .chars().map(sanitize_char).collect();
         let mat = path.with_file_name(fname).with_extension("m");
-        let pdf = mat.clone().with_extension("pdf");
+        let pdf = mat.with_extension("pdf");
         let mut f = File::create(&mat)?;
         let m = self.mesh;
         write!(f, "%% Run in Matlab with: run {}\n\
@@ -1382,6 +1392,7 @@ impl<'a, M> Mathematica<'a, M>
 where M: Mesh {
     /// Specify a function `c` that give the color `c(i)` for each
     /// point index `i`.
+    #[must_use]
     pub fn color<C>(self, c: C) -> Self
     where C: Fn(usize) -> RGB8 + 'a {
         Mathematica { pt_color: Some(Box::new(c)), .. self }
@@ -1393,8 +1404,7 @@ where M: Mesh {
     pub fn save<P: AsRef<Path>>(&self, path: P) -> Result<(), io::Error> {
         let path = path.as_ref();
         let allowed_char = |c: &char| {
-            match c {'0' ..= '9' | 'a' ..= 'z' | 'A' ..= 'Z' => true,
-                     _ => false }};
+            matches!(c, '0' ..= '9' | 'a' ..= 'z' | 'A' ..= 'Z') };
         let fname: String = path.with_extension("").file_name()
             .expect("mesh2d::Mathematica::save: a filename is required.")
             .to_str().unwrap_or("RustMathematica")
@@ -1407,9 +1417,9 @@ where M: Mesh {
         let mut f = File::create(&mat)?;
         let m = self.mesh;
         let z = self.z;
-        write!(f, "(* Created by the Rust mesh2d crate. *)\n")?;
+        writeln!(f, "(* Created by the Rust mesh2d crate. *)")?;
         if m.n_points() == 0 {
-            write!(f, "\"No points in the mesh!\"\n")?;
+            writeln!(f, "\"No points in the mesh!\"")?;
             return Ok(())
         }
         write!(f, "{}`pts = {{", pkg)?;
@@ -1427,7 +1437,7 @@ where M: Mesh {
             let [i1, i2, i3] = m.triangle(t);
             write!(f, ", {{{},{},{}}}", i1+1, i2+1, i3+1)?;
         }
-        write!(f, "}};\n")?;
+        writeln!(f, "}};")?;
         match &self.pt_color {
             None => {
                 let mut z_min = f64::MAX;

@@ -211,6 +211,12 @@ extern "C" fn triunsuitable(triorg: &[f64; 2], tridest: &[f64; 2],
 /// - `p2` is the triangle's destination vertex.
 /// - `p3` is the triangle's apex vertex.
 /// - `area` is the area of the triangle.
+///
+/// # Safety
+///
+/// This function assumes that `in_`, `out` and `vorout` are
+/// initialized according to Triangle requirements.  See the file
+/// `triangle.h` for more information.
 pub unsafe fn triangulate_with_triunsuitable(
     triswitches: *const c_char,
     in_: *const triangulateio,
