@@ -279,9 +279,20 @@ struct triangulateio {
   int numberofedges;                                             /* Out only */
 };
 
+#ifdef EXTERNAL_TEST
+typedef int (*triunsuitable)(REAL *triorg, REAL *tridest, REAL *triapex,
+                             REAL area, void *user_data);
+#endif /* not EXTERNAL_TEST */
+
+
 #ifdef ANSI_DECLARATORS
 void triangulate(char *, struct triangulateio *, struct triangulateio *,
-                 struct triangulateio *);
+                 struct triangulateio *,
+#ifdef EXTERNAL_TEST
+                 triunsuitable triunsuitable,
+                 void *user_data
+#endif /* not EXTERNAL_TEST */
+  );
 void trifree(VOID *memptr);
 #else /* not ANSI_DECLARATORS */
 void triangulate();

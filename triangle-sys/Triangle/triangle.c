@@ -795,6 +795,12 @@ struct behavior {
   REAL minangle, goodangle, offconstant;
   REAL maxarea;
 
+#ifdef EXTERNAL_TEST
+/* The `triunsuitable' function and its user data. */
+  triunsuitable triunsuitable;
+  void *user_data;
+#endif /* not EXTERNAL_TEST */
+
 /* Variables for file names.                                                 */
 
 #ifndef TRILIBRARY
@@ -1354,11 +1360,7 @@ int minus1mod3[3] = {2, 0, 1};
 /*                                                                           */
 /*****************************************************************************/
 
-#ifdef EXTERNAL_TEST
-
-int triunsuitable();
-
-#else /* not EXTERNAL_TEST */
+#ifndef EXTERNAL_TEST
 
 #ifdef ANSI_DECLARATORS
 int triunsuitable(vertex triorg, vertex tridest, vertex triapex, REAL area)
@@ -7301,7 +7303,13 @@ struct otri *testtri;
 
     if (b->usertest) {
       /* Check whether the user thinks this triangle is too large. */
-      if (triunsuitable(torg, tdest, tapex, area)) {
+      if (
+#ifdef EXTERNAL_TEST
+        b->triunsuitable(torg, tdest, tapex, area, b->user_data)
+#else
+        triunsuitable(torg, tdest, tapex, area)
+#endif /* not EXTERNAL_TEST */
+        ) {
         enqueuebadtri(m, b, testtri, minedge, tapex, torg, tdest);
         return;
       }
@@ -15667,13 +15675,27 @@ struct behavior *b;
 
 #ifdef ANSI_DECLARATORS
 void triangulate(char *triswitches, struct triangulateio *in,
-                 struct triangulateio *out, struct triangulateio *vorout)
+                 struct triangulateio *out, struct triangulateio *vorout,
+#ifdef EXTERNAL_TEST
+                 triunsuitable triunsuitable,
+                 void *user_data
+#endif /* not EXTERNAL_TEST */
+  )
 #else /* not ANSI_DECLARATORS */
-void triangulate(triswitches, in, out, vorout)
+void triangulate(triswitches, in, out, vorout,
+#ifdef EXTERNAL_TEST
+                 triunsuitable,
+                 user_data
+#endif /* not EXTERNAL_TEST */
+  )
 char *triswitches;
 struct triangulateio *in;
 struct triangulateio *out;
 struct triangulateio *vorout;
+#ifdef EXTERNAL_TEST
+triunsuitable triunsuitable;
+void *user_data;
+#endif /* not EXTERNAL_TEST */
 #endif /* not ANSI_DECLARATORS */
 
 #else /* not TRILIBRARY */
@@ -15710,6 +15732,10 @@ char **argv;
   triangleinit(&m);
 #ifdef TRILIBRARY
   parsecommandline(1, &triswitches, &b);
+#ifdef EXTERNAL_TEST
+  b.triunsuitable = triunsuitable;
+  b.user_data = user_data;
+#endif /* not EXTERNAL_TEST */
 #else /* not TRILIBRARY */
   parsecommandline(argc, argv, &b);
 #endif /* not TRILIBRARY */
